@@ -9,6 +9,7 @@ struct AddMealView: View {
     let date: Date
     
     private let mealTypes = ["Breakfast", "Lunch", "Dinner", "Snack"]
+    @State private var newIngredient = ""
     
     var body: some View {
         NavigationView {
@@ -23,6 +24,25 @@ struct AddMealView: View {
                     TextField("Name", text: $viewModel.name)
                     TextField("Notes", text: $viewModel.notes, axis: .vertical)
                         .lineLimit(3...6)
+                }
+                
+                Section("Ingredients") {
+                    ForEach(viewModel.ingredients, id: \.self) { ingredient in
+                        Text(ingredient)
+                    }
+                    .onDelete { indices in
+                        viewModel.ingredients.remove(atOffsets: indices)
+                    }
+                    
+                    HStack {
+                        TextField("Add ingredient", text: $newIngredient)
+                        Button("Add") {
+                            if !newIngredient.isEmpty {
+                                viewModel.ingredients.append(newIngredient)
+                                newIngredient = ""
+                            }
+                        }
+                    }
                 }
                 
                 Section("Assignment") {
@@ -84,6 +104,7 @@ class AddMealViewModel: ObservableObject {
     @Published var mealType = "Breakfast"
     @Published var name = ""
     @Published var notes = ""
+    @Published var ingredients: [String] = []
     @Published var selectedMemberId: String?
     @Published var familyMembers: [FamilyMember] = []
     @Published var isLoadingMembers = false
@@ -117,17 +138,47 @@ class AddMealViewModel: ObservableObject {
         guard let userId = Auth.auth().currentUser?.uid,
               let memberId = selectedMemberId else { return }
         
+        // Create the meal
         let meal = Meal(
             id: UUID().uuidString,
-            type: mealType,
             name: name,
-            notes: notes,
-            date: date,
-            userId: userId,
-            assignedTo: memberId
+            type: mealType,
+            ingredients: ingredients,
+            notes: notes.isEmpty ? nil : notes,
+            assigneeId: memberId,
+            userId: userId
         )
         
         do {
+            // Get the start and end of the day for the given date
+            let calendar = Calendar.current
+            let startOfDay = calendar.startOfDay(for: date)
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+            
+            // Try to find an existing meal plan for this date
+            let mealPlansRef = db.collection("users/\(userId)/mealPlans")
+            let querySnapshot = try await mealPlansRef
+                .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: startOfDay))
+                .whereField("date", isLessThan: Timestamp(date: endOfDay))
+                .getDocuments()
+            
+            if let existingPlan = querySnapshot.documents.first {
+                // Update existing meal plan
+                var mealPlan = try existingPlan.data(as: MealPlan.self)
+                mealPlan.meals.append(meal)
+                try await mealPlansRef.document(mealPlan.id).setData(from: mealPlan)
+            } else {
+                // Create new meal plan
+                let mealPlan = MealPlan(
+                    id: UUID().uuidString,
+                    meals: [meal],
+                    date: startOfDay,
+                    userId: userId
+                )
+                try await mealPlansRef.document(mealPlan.id).setData(from: mealPlan)
+            }
+            
+            // Also save the meal in the meals collection for reference
             try await db.collection("users/\(userId)/meals").document(meal.id).setData(from: meal)
         } catch {
             showingError = true

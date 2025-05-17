@@ -31,7 +31,7 @@ struct DayCell: View {
                         ForEach(events.prefix(3)) { event in
                             HStack(spacing: 4) {
                                 Circle()
-                                    .fill(Color(hex: event.color))
+                                    .fill(Color(hex: event.colors.first ?? "#000000"))
                                     .frame(width: 6, height: 6)
                                 
                                 Text(event.title)
@@ -42,6 +42,12 @@ struct DayCell: View {
                                     Image(systemName: "g.circle.fill")
                                         .font(.caption2)
                                         .foregroundColor(.blue)
+                                }
+                                
+                                if event.assignees.count > 1 {
+                                    Text("+\(event.assignees.count - 1)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
                                 }
                             }
                         }
@@ -72,8 +78,8 @@ struct DayCell: View {
                 endTime: Date().addingTimeInterval(3600),
                 location: "Conference Room",
                 notes: nil,
-                assignee: "Alice",
-                color: "#FF0000",
+                assignees: ["Alice", "Bob"],
+                colors: ["#FF0000", "#00FF00"],
                 isGoogleEvent: false,
                 userId: "user1"
             ),
@@ -84,8 +90,8 @@ struct DayCell: View {
                 endTime: Date().addingTimeInterval(10800),
                 location: "Cafeteria",
                 notes: nil,
-                assignee: "Bob",
-                color: "#00FF00",
+                assignees: ["Bob", "Charlie", "David"],
+                colors: ["#00FF00", "#0000FF", "#FF00FF"],
                 isGoogleEvent: true,
                 userId: "user1"
             )

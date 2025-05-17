@@ -2,6 +2,7 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import GoogleSignIn
+import Firebase
 
 class ProfileViewModel: ObservableObject {
     @Published var currentUser: User?

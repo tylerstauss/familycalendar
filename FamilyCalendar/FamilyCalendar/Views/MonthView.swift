@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct MonthView: View {
-    @StateObject private var viewModel = MonthViewModel()
+    @StateObject private var viewModel: MonthViewModel
+    let date: Date
+    
+    init(date: Date) {
+        self.date = date
+        _viewModel = StateObject(wrappedValue: MonthViewModel(initialDate: date))
+    }
     
     var body: some View {
         NavigationView {
@@ -38,6 +44,10 @@ struct MonthView: View {
                             if let date = date {
                                 DayCell(date: date, events: viewModel.events(for: date))
                                     .frame(height: 80)
+                                    .onTapGesture {
+                                        viewModel.selectedDate = date
+                                        viewModel.showingAddEvent = true
+                                    }
                             } else {
                                 Color.clear
                                     .frame(height: 80)
@@ -49,17 +59,20 @@ struct MonthView: View {
             }
             .navigationTitle("Month")
             .toolbar {
-                Button(action: { viewModel.showingAddEvent = true }) {
+                Button(action: {
+                    viewModel.selectedDate = viewModel.currentDate
+                    viewModel.showingAddEvent = true
+                }) {
                     Image(systemName: "plus")
                 }
             }
             .sheet(isPresented: $viewModel.showingAddEvent) {
-                AddEventView()
+                AddEventView(date: viewModel.selectedDate ?? Date())
             }
         }
     }
 }
 
 #Preview {
-    MonthView()
+    MonthView(date: Date())
 } 

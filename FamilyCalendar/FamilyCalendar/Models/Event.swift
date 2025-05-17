@@ -8,8 +8,8 @@ struct Event: Identifiable, Codable {
     var endTime: Date
     var location: String?
     var notes: String?
-    var assignee: String?
-    var color: String
+    var assignees: [String]
+    var colors: [String]
     var isGoogleEvent: Bool
     var userId: String
     
@@ -20,8 +20,8 @@ struct Event: Identifiable, Codable {
         case endTime
         case location
         case notes
-        case assignee
-        case color
+        case assignees
+        case colors
         case isGoogleEvent
         case userId
     }
@@ -38,8 +38,8 @@ extension Event {
             endTime: (data["endTime"] as? Timestamp)?.dateValue() ?? Date(),
             location: data["location"] as? String,
             notes: data["notes"] as? String,
-            assignee: data["assignee"] as? String,
-            color: data["color"] as? String ?? "#000000",
+            assignees: data["assignees"] as? [String] ?? [],
+            colors: data["colors"] as? [String] ?? ["#000000"],
             isGoogleEvent: data["isGoogleEvent"] as? Bool ?? false,
             userId: data["userId"] as? String ?? ""
         )

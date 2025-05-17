@@ -2,9 +2,10 @@ import Foundation
 import FirebaseFirestore
 import FirebaseAuth
 
+@MainActor
 class DayViewModel: ObservableObject {
     @Published var events: [Event] = []
-    @Published var meals: MealPlan = MealPlan(date: Date(), userId: "")
+    @Published var mealAssignments: [MealAssignment] = []
     @Published var showingAddEvent = false
     
     private var db = Firestore.firestore()
@@ -32,47 +33,61 @@ class DayViewModel: ObservableObject {
                     return
                 }
                 
-                self?.events = documents.compactMap { document in
-                    try? Event.from(document)
+                Task { @MainActor in
+                    self?.events = documents.compactMap { document in
+                        try? Event.from(document)
+                    }
                 }
             }
+    }
+    
+    func loadData(for date: Date, familyId: String) async {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
         
-        // Load meal plan
-        db.collection("users/\(userId)/mealPlans")
-            .whereField("date", isEqualTo: Timestamp(date: startOfDay))
-            .getDocuments { [weak self] querySnapshot, error in
-                guard let document = querySnapshot?.documents.first else {
-                    // No meal plan for today
-                    self?.meals = MealPlan(date: startOfDay, userId: userId)
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+        
+        // Load events
+        listenerRegistration?.remove()
+        listenerRegistration = db.collection("families/\(familyId)/events")
+            .whereField("startTime", isGreaterThanOrEqualTo: startOfDay)
+            .whereField("startTime", isLessThan: endOfDay)
+            .addSnapshotListener { [weak self] querySnapshot, error in
+                guard let documents = querySnapshot?.documents else {
+                    print("Error fetching documents: \(error?.localizedDescription ?? "Unknown error")")
                     return
                 }
                 
-                let data = document.data()
-                // Load meals from references
-                if let breakfastRef = data["breakfast"] as? DocumentReference {
-                    breakfastRef.getDocument { document, _ in
-                        if let document = document {
-                            self?.meals.breakfast = try? Meal.from(document as! QueryDocumentSnapshot)
-                        }
-                    }
-                }
-                
-                if let lunchRef = data["lunch"] as? DocumentReference {
-                    lunchRef.getDocument { document, _ in
-                        if let document = document {
-                            self?.meals.lunch = try? Meal.from(document as! QueryDocumentSnapshot)
-                        }
-                    }
-                }
-                
-                if let dinnerRef = data["dinner"] as? DocumentReference {
-                    dinnerRef.getDocument { document, _ in
-                        if let document = document {
-                            self?.meals.dinner = try? Meal.from(document as! QueryDocumentSnapshot)
-                        }
+                Task { @MainActor in
+                    self?.events = documents.compactMap { document in
+                        try? Event.from(document)
                     }
                 }
             }
+        
+        // Load meal assignments
+        let snapshot = try? await db.collection("families/\(familyId)/mealAssignments")
+            .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: startOfDay))
+            .whereField("date", isLessThan: Timestamp(date: endOfDay))
+            .getDocuments()
+        
+        if let documents = snapshot?.documents {
+            self.mealAssignments = documents.compactMap { try? MealAssignment.from($0) }
+        }
+    }
+    
+    func events(for memberId: String) -> [Event] {
+        return events.filter { $0.assignees.contains(memberId) }
+    }
+    
+    func meals(for memberId: String) -> [MealAssignment] {
+        return mealAssignments.filter { $0.assigneeId == memberId }
+    }
+    
+    func template(for meal: MealAssignment) -> MealTemplate? {
+        // TODO: Implement this method to fetch the meal template
+        return nil
     }
     
     deinit {

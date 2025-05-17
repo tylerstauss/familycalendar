@@ -88,15 +88,35 @@ class AddFamilyMemberViewModel: ObservableObject {
     func saveMember() async {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         
-        let member = FamilyMember(
-            id: UUID().uuidString,
-            name: name,
-            color: selectedColor,
-            userId: userId
-        )
-        
+        // Get the current family ID from Firestore
         do {
-            try await db.collection("users/\(userId)/familyMembers").document(member.id).setData(from: member)
+            let familiesSnapshot = try await db.collection("families")
+                .whereField("members", arrayContains: ["userId": userId])
+                .getDocuments()
+            
+            guard let familyDoc = familiesSnapshot.documents.first else {
+                showingError = true
+                errorMessage = "No family found"
+                return
+            }
+            
+            let familyId = familyDoc.documentID
+            
+            let member = FamilyMember(
+                id: UUID().uuidString,
+                name: name,
+                color: selectedColor,
+                userId: userId,
+                familyId: familyId,
+                role: "member"  // New members are always regular members
+            )
+            
+            try await db.collection("families")
+                .document(familyId)
+                .collection("members")
+                .document(member.id)
+                .setData(from: member)
+                
         } catch {
             showingError = true
             errorMessage = error.localizedDescription

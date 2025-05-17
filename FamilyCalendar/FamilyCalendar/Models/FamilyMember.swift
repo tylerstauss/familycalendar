@@ -6,24 +6,21 @@ struct FamilyMember: Identifiable, Codable {
     var name: String
     var color: String
     var userId: String
+    var familyId: String
+    var role: String // owner/member
     
     enum CodingKeys: String, CodingKey {
         case id
         case name
         case color
         case userId
+        case familyId
+        case role
     }
 }
 
 extension FamilyMember {
     static func from(_ document: QueryDocumentSnapshot) throws -> FamilyMember {
-        let data = document.data()
-        
-        return FamilyMember(
-            id: document.documentID,
-            name: data["name"] as? String ?? "",
-            color: data["color"] as? String ?? "#000000",
-            userId: data["userId"] as? String ?? ""
-        )
+        try document.data(as: FamilyMember.self)
     }
 } 

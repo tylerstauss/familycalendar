@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct WeekView: View {
-    @StateObject private var viewModel = WeekViewModel()
+    @StateObject private var viewModel: WeekViewModel
+    let date: Date
+    
+    init(date: Date) {
+        self.date = date
+        _viewModel = StateObject(wrappedValue: WeekViewModel(initialDate: date))
+    }
     
     var body: some View {
         NavigationView {
@@ -37,12 +43,12 @@ struct WeekView: View {
                 }
             }
             .sheet(isPresented: $viewModel.showingAddEvent) {
-                AddEventView()
+                AddEventView(date: viewModel.weekDays.first ?? Date())
             }
         }
     }
 }
 
 #Preview {
-    WeekView()
+    WeekView(date: Date())
 } 

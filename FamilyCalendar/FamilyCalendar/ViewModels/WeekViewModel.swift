@@ -9,25 +9,19 @@ class WeekViewModel: ObservableObject {
     
     private var db = Firestore.firestore()
     private var listenerRegistration: ListenerRegistration?
+    private let calendar = Calendar.current
     
-    init() {
-        setupWeekDays()
+    init(initialDate: Date = Date()) {
+        generateWeekDays(from: initialDate)
+        // Load events for the week
         loadWeekData()
     }
     
-    private func setupWeekDays() {
+    private func generateWeekDays(from date: Date) {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        
-        // Get the start of the week (Sunday)
-        var weekday = calendar.component(.weekday, from: today)
-        let daysToSubtract = weekday - 1
-        
-        guard let startOfWeek = calendar.date(byAdding: .day, value: -daysToSubtract, to: today) else { return }
-        
-        // Generate array of dates for the week
-        weekDays = (0...6).compactMap { day in
-            calendar.date(byAdding: .day, value: day, to: startOfWeek)
+        let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date))!
+        weekDays = (0...6).map { day in
+            calendar.date(byAdding: .day, value: day, to: startOfWeek)!
         }
     }
     

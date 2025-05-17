@@ -45,13 +45,19 @@ struct EventCard: View {
                     .lineLimit(1)
             }
             
-            if let assignee = event.assignee {
-                HStack {
-                    Text(assignee)
-                        .font(.caption)
-                    Circle()
-                        .fill(Color(hex: event.color))
-                        .frame(width: 8, height: 8)
+            if !event.assignees.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(zip(event.assignees, event.colors)), id: \.0) { assignee, color in
+                            HStack(spacing: 4) {
+                                Text(assignee)
+                                    .font(.caption)
+                                Circle()
+                                    .fill(Color(hex: color))
+                                    .frame(width: 8, height: 8)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -70,8 +76,8 @@ struct EventCard: View {
             endTime: Date().addingTimeInterval(3600),
             location: "Conference Room",
             notes: "Weekly sync",
-            assignee: "Alice",
-            color: "#FF0000",
+            assignees: ["Alice", "Bob", "Charlie"],
+            colors: ["#FF0000", "#00FF00", "#0000FF"],
             isGoogleEvent: false,
             userId: "user1"
         )

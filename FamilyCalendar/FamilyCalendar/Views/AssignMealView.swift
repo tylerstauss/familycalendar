@@ -2,29 +2,30 @@ import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
 
-struct AddEventView: View {
+struct AssignMealView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = AddEventViewModel()
+    @EnvironmentObject private var familyViewModel: FamilyViewModel
+    @StateObject private var viewModel: AssignMealViewModel
+    @State private var selectedDate = Date()
+    @State private var selectedTime = Date()
     
-    let date: Date
+    init(template: MealTemplate) {
+        _viewModel = StateObject(wrappedValue: AssignMealViewModel(template: template))
+    }
     
     var body: some View {
         NavigationView {
             Form {
-                Section("Event Details") {
-                    TextField("Title", text: $viewModel.title)
-                    DatePicker("Start Time", selection: $viewModel.startTime, in: date...)
-                    DatePicker("End Time", selection: $viewModel.endTime, in: viewModel.startTime...)
-                    TextField("Location", text: $viewModel.location)
-                    TextField("Notes", text: $viewModel.notes, axis: .vertical)
-                        .lineLimit(3...6)
+                Section("Date & Time") {
+                    DatePicker("Date", selection: $selectedDate, displayedComponents: .date)
+                    DatePicker("Time", selection: $selectedTime, displayedComponents: .hourAndMinute)
                 }
                 
                 Section("Assignment") {
                     if viewModel.isLoadingMembers {
                         ProgressView()
                     } else {
-                        ForEach(viewModel.familyMembers) { member in
+                        ForEach(familyViewModel.familyMembers) { member in
                             HStack {
                                 Circle()
                                     .fill(Color(hex: member.color))
@@ -44,7 +45,7 @@ struct AddEventView: View {
                     }
                 }
             }
-            .navigationTitle("Add Event")
+            .navigationTitle("Assign Meal")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -54,9 +55,13 @@ struct AddEventView: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button("Assign") {
                         Task {
-                            await viewModel.saveEvent()
+                            await viewModel.assignMeal(
+                                date: selectedDate,
+                                time: selectedTime,
+                                familyId: familyViewModel.currentFamily?.id ?? ""
+                            )
                             dismiss()
                         }
                     }
@@ -68,31 +73,25 @@ struct AddEventView: View {
             } message: {
                 Text(viewModel.errorMessage)
             }
-            .task {
-                await viewModel.loadFamilyMembers()
-                viewModel.startTime = date
-                viewModel.endTime = Calendar.current.date(byAdding: .hour, value: 1, to: date) ?? date
-            }
         }
     }
 }
 
-class AddEventViewModel: ObservableObject {
-    @Published var title = ""
-    @Published var startTime = Date()
-    @Published var endTime = Date()
-    @Published var location = ""
-    @Published var notes = ""
+class AssignMealViewModel: ObservableObject {
     @Published var selectedMemberIds: Set<String> = []
-    @Published var familyMembers: [FamilyMember] = []
     @Published var isLoadingMembers = false
     @Published var showingError = false
     @Published var errorMessage = ""
     
+    private let template: MealTemplate
     private var db = Firestore.firestore()
     
+    init(template: MealTemplate) {
+        self.template = template
+    }
+    
     var isValid: Bool {
-        !title.isEmpty && !selectedMemberIds.isEmpty && endTime > startTime
+        !selectedMemberIds.isEmpty
     }
     
     func toggleMember(_ memberId: String) {
@@ -104,50 +103,32 @@ class AddEventViewModel: ObservableObject {
     }
     
     @MainActor
-    func loadFamilyMembers() async {
+    func assignMeal(date: Date, time: Date, familyId: String) async {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         
-        isLoadingMembers = true
-        defer { isLoadingMembers = false }
+        // Create a meal assignment for each selected family member
+        let assignments = selectedMemberIds.map { memberId in
+            MealAssignment(
+                id: UUID().uuidString,
+                templateId: template.id,
+                assigneeId: memberId,
+                date: date,
+                time: time,
+                status: "planned",
+                familyId: familyId
+            )
+        }
         
         do {
-            let snapshot = try await db.collection("users/\(userId)/familyMembers").getDocuments()
-            familyMembers = snapshot.documents.compactMap { try? $0.data(as: FamilyMember.self) }
+            // Save each assignment
+            for assignment in assignments {
+                try await db.collection("families/\(familyId)/mealAssignments")
+                    .document(assignment.id)
+                    .setData(from: assignment)
+            }
         } catch {
             showingError = true
             errorMessage = error.localizedDescription
         }
     }
-    
-    @MainActor
-    func saveEvent() async {
-        guard let userId = Auth.auth().currentUser?.uid else { return }
-        
-        let selectedMembers = familyMembers.filter { selectedMemberIds.contains($0.id) }
-        let memberColors = selectedMembers.map { $0.color }
-        
-        let event = Event(
-            id: UUID().uuidString,
-            title: title,
-            startTime: startTime,
-            endTime: endTime,
-            location: location.isEmpty ? nil : location,
-            notes: notes.isEmpty ? nil : notes,
-            assignees: Array(selectedMemberIds),
-            colors: memberColors,
-            isGoogleEvent: false,
-            userId: userId
-        )
-        
-        do {
-            try await db.collection("users/\(userId)/events").document(event.id).setData(from: event)
-        } catch {
-            showingError = true
-            errorMessage = error.localizedDescription
-        }
-    }
-}
-
-#Preview {
-    AddEventView(date: Date())
 } 

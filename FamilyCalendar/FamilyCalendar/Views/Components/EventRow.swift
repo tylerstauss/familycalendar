@@ -33,13 +33,19 @@ struct EventRow: View {
                     .foregroundColor(.secondary)
             }
             
-            if let assignee = event.assignee {
-                HStack {
-                    Text(assignee)
-                        .font(.caption)
-                    Circle()
-                        .fill(Color(hex: event.color))
-                        .frame(width: 10, height: 10)
+            if !event.assignees.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Array(zip(event.assignees, event.colors)), id: \.0) { assignee, color in
+                            HStack(spacing: 4) {
+                                Text(assignee)
+                                    .font(.caption)
+                                Circle()
+                                    .fill(Color(hex: color))
+                                    .frame(width: 10, height: 10)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,6 +1,6 @@
 import Foundation
 import GoogleSignIn
-import GoogleAPIClientForREST
+import GoogleAPIClientForREST_Calendar
 import FirebaseAuth
 import FirebaseFirestore
 
@@ -17,7 +17,8 @@ class GoogleCalendarService: ObservableObject {
     
     func checkAuthorizationStatus() {
         if let user = GIDSignIn.sharedInstance.currentUser,
-           !user.grantedScopes.contains(where: { $0.hasSuffix("calendar") }) {
+           let scopes = user.grantedScopes,
+           !scopes.contains(where: { $0.hasSuffix("calendar") }) {
             isAuthorized = false
         } else {
             isAuthorized = GIDSignIn.sharedInstance.hasPreviousSignIn()
@@ -29,14 +30,17 @@ class GoogleCalendarService: ObservableObject {
             throw CalendarError.missingClientId
         }
         
-        let config = GIDConfiguration(clientID: clientID)
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let window = windowScene.windows.first,
               let rootViewController = window.rootViewController else {
             throw CalendarError.missingViewController
         }
         
-        let result = try await GIDSignIn.sharedInstance.signIn(
+        // Configure GIDSignIn with the client ID
+        let signIn = GIDSignIn.sharedInstance
+        signIn.configuration = GIDConfiguration(clientID: clientID)
+        
+        let result = try await signIn.signIn(
             withPresenting: rootViewController,
             hint: Auth.auth().currentUser?.email,
             additionalScopes: [
@@ -45,21 +49,16 @@ class GoogleCalendarService: ObservableObject {
             ]
         )
         
-        guard let user = result.user else {
-            throw CalendarError.signInFailed
-        }
-        
         // Store refresh token in Firestore
-        if let userId = Auth.auth().currentUser?.uid,
-           let refreshToken = user.refreshToken?.tokenString {
+        if let userId = Auth.auth().currentUser?.uid {
             try await db.collection("users").document(userId).updateData([
                 "googleCalendarLinked": true,
-                "googleRefreshToken": refreshToken
+                "googleRefreshToken": result.user.refreshToken
             ])
         }
         
         isAuthorized = true
-        service.authorizer = user.fetcherAuthorizer
+        service.authorizer = result.user.fetcherAuthorizer
     }
     
     func fetchEvents(startDate: Date, endDate: Date) async throws -> [GTLRCalendar_Event] {
@@ -67,10 +66,10 @@ class GoogleCalendarService: ObservableObject {
         query.timeMin = GTLRDateTime(date: startDate)
         query.timeMax = GTLRDateTime(date: endDate)
         query.singleEvents = true
-        query.orderBy = "startTime"
+        query.orderBy = kGTLRCalendarOrderByStartTime
         
-        let result = try await withCheckedThrowingContinuation { continuation in
-            service.executeQuery(query) { callbackTicket, result, error in
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[GTLRCalendar_Event], Error>) in
+            service.executeQuery(query) { (callbackTicket: GTLRServiceTicket?, result: Any?, error: Error?) in
                 if let error = error {
                     continuation.resume(throwing: error)
                     return
@@ -84,8 +83,6 @@ class GoogleCalendarService: ObservableObject {
                 continuation.resume(returning: eventsList.items ?? [])
             }
         }
-        
-        return result
     }
     
     func createEvent(_ event: Event) async throws -> GTLRCalendar_Event {
@@ -94,19 +91,40 @@ class GoogleCalendarService: ObservableObject {
         calendarEvent.descriptionProperty = event.notes
         calendarEvent.location = event.location
         
+        // Add assignees as attendees
+        if !event.assignees.isEmpty {
+            calendarEvent.attendees = event.assignees.map { assignee in
+                let attendee = GTLRCalendar_EventAttendee()
+                attendee.displayName = assignee
+                return attendee
+            }
+        }
+        
         let startDateTime = GTLRDateTime(date: event.startTime)
         let endDateTime = GTLRDateTime(date: event.endTime)
         
-        calendarEvent.start = GTLRCalendar_EventDateTime()
-        calendarEvent.start?.dateTime = startDateTime
+        let startEventDateTime = GTLRCalendar_EventDateTime()
+        startEventDateTime.dateTime = startDateTime
+        calendarEvent.start = startEventDateTime
         
-        calendarEvent.end = GTLRCalendar_EventDateTime()
-        calendarEvent.end?.dateTime = endDateTime
+        let endEventDateTime = GTLRCalendar_EventDateTime()
+        endEventDateTime.dateTime = endDateTime
+        calendarEvent.end = endEventDateTime
+        
+        // Add color information in the description if needed
+        if !event.colors.isEmpty {
+            let colorInfo = "Assigned colors: " + zip(event.assignees, event.colors)
+                .map { "\($0): \($1)" }
+                .joined(separator: ", ")
+            calendarEvent.descriptionProperty = [event.notes, colorInfo]
+                .compactMap { $0 }
+                .joined(separator: "\n\n")
+        }
         
         let query = GTLRCalendarQuery_EventsInsert.query(withObject: calendarEvent, calendarId: "primary")
         
-        let result = try await withCheckedThrowingContinuation { continuation in
-            service.executeQuery(query) { callbackTicket, result, error in
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<GTLRCalendar_Event, Error>) in
+            service.executeQuery(query) { (callbackTicket: GTLRServiceTicket?, result: Any?, error: Error?) in
                 if let error = error {
                     continuation.resume(throwing: error)
                     return
@@ -120,17 +138,16 @@ class GoogleCalendarService: ObservableObject {
                 continuation.resume(returning: createdEvent)
             }
         }
-        
-        return result
     }
     
-    func signOut() {
+    @MainActor
+    func signOut() async throws {
         GIDSignIn.sharedInstance.signOut()
         isAuthorized = false
         
         // Update Firestore if needed
         if let userId = Auth.auth().currentUser?.uid {
-            try? await db.collection("users").document(userId).updateData([
+            try await db.collection("users").document(userId).updateData([
                 "googleCalendarLinked": false,
                 "googleRefreshToken": FieldValue.delete()
             ])

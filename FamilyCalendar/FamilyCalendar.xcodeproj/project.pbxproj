@@ -12,6 +12,11 @@
 		D1954F122DC481C60052E0B8 /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F112DC481C60052E0B8 /* FirebaseAnalyticsWithoutAdIdSupport */; };
 		D1954F142DC481C60052E0B8 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F132DC481C60052E0B8 /* FirebaseAppCheck */; };
 		D1954F162DC481C60052E0B8 /* FirebaseAppDistribution-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F152DC481C60052E0B8 /* FirebaseAppDistribution-Beta */; };
+		D1954F1C2DC56F0F0052E0B8 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F1B2DC56F0F0052E0B8 /* FirebaseAuth */; };
+		D1954F1E2DC56F850052E0B8 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F1D2DC56F850052E0B8 /* FirebaseFirestore */; };
+		D1954F222DC571DA0052E0B8 /* GoogleAPIClientForREST_Calendar in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F212DC571DA0052E0B8 /* GoogleAPIClientForREST_Calendar */; };
+		D1954F242DC571F00052E0B8 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F232DC571F00052E0B8 /* GoogleSignIn */; };
+		D1954F262DC571F60052E0B8 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = D1954F252DC571F60052E0B8 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,9 +42,22 @@
 		D1954EC52DC4782F0052E0B8 /* FamilyCalendarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FamilyCalendarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D1954F192DC56E110052E0B8 /* Exceptions for "FamilyCalendar" folder in "FamilyCalendar" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D1954EAD2DC4782C0052E0B8 /* FamilyCalendar */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		D1954EB02DC4782C0052E0B8 /* FamilyCalendar */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D1954F192DC56E110052E0B8 /* Exceptions for "FamilyCalendar" folder in "FamilyCalendar" target */,
+			);
 			path = FamilyCalendar;
 			sourceTree = "<group>";
 		};
@@ -61,10 +79,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				D1954F142DC481C60052E0B8 /* FirebaseAppCheck in Frameworks */,
+				D1954F1C2DC56F0F0052E0B8 /* FirebaseAuth in Frameworks */,
 				D1954F0E2DC481C60052E0B8 /* FirebaseAnalytics in Frameworks */,
+				D1954F222DC571DA0052E0B8 /* GoogleAPIClientForREST_Calendar in Frameworks */,
 				D1954F162DC481C60052E0B8 /* FirebaseAppDistribution-Beta in Frameworks */,
+				D1954F262DC571F60052E0B8 /* GoogleSignInSwift in Frameworks */,
 				D1954F122DC481C60052E0B8 /* FirebaseAnalyticsWithoutAdIdSupport in Frameworks */,
 				D1954F102DC481C60052E0B8 /* FirebaseAnalyticsOnDeviceConversion in Frameworks */,
+				D1954F1E2DC56F850052E0B8 /* FirebaseFirestore in Frameworks */,
+				D1954F242DC571F00052E0B8 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +114,7 @@
 				D1954EB02DC4782C0052E0B8 /* FamilyCalendar */,
 				D1954EBE2DC4782F0052E0B8 /* FamilyCalendarTests */,
 				D1954EC82DC4782F0052E0B8 /* FamilyCalendarUITests */,
+				D1954F1A2DC56F0F0052E0B8 /* Frameworks */,
 				D1954EAF2DC4782C0052E0B8 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -103,6 +127,13 @@
 				D1954EC52DC4782F0052E0B8 /* FamilyCalendarUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D1954F1A2DC56F0F0052E0B8 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -130,6 +161,11 @@
 				D1954F112DC481C60052E0B8 /* FirebaseAnalyticsWithoutAdIdSupport */,
 				D1954F132DC481C60052E0B8 /* FirebaseAppCheck */,
 				D1954F152DC481C60052E0B8 /* FirebaseAppDistribution-Beta */,
+				D1954F1B2DC56F0F0052E0B8 /* FirebaseAuth */,
+				D1954F1D2DC56F850052E0B8 /* FirebaseFirestore */,
+				D1954F212DC571DA0052E0B8 /* GoogleAPIClientForREST_Calendar */,
+				D1954F232DC571F00052E0B8 /* GoogleSignIn */,
+				D1954F252DC571F60052E0B8 /* GoogleSignInSwift */,
 			);
 			productName = FamilyCalendar;
 			productReference = D1954EAE2DC4782C0052E0B8 /* FamilyCalendar.app */;
@@ -215,6 +251,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D1954F0C2DC481C60052E0B8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				D1954F1F2DC570330052E0B8 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				D1954F202DC571B70052E0B8 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D1954EAF2DC4782C0052E0B8 /* Products */;
@@ -581,6 +619,22 @@
 				minimumVersion = 11.12.0;
 			};
 		};
+		D1954F1F2DC570330052E0B8 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+		D1954F202DC571B70052E0B8 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/google-api-objectivec-client-for-rest.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -608,6 +662,31 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D1954F0C2DC481C60052E0B8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = "FirebaseAppDistribution-Beta";
+		};
+		D1954F1B2DC56F0F0052E0B8 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1954F0C2DC481C60052E0B8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		D1954F1D2DC56F850052E0B8 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1954F0C2DC481C60052E0B8 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		D1954F212DC571DA0052E0B8 /* GoogleAPIClientForREST_Calendar */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1954F202DC571B70052E0B8 /* XCRemoteSwiftPackageReference "google-api-objectivec-client-for-rest" */;
+			productName = GoogleAPIClientForREST_Calendar;
+		};
+		D1954F232DC571F00052E0B8 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1954F1F2DC570330052E0B8 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		D1954F252DC571F60052E0B8 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1954F1F2DC570330052E0B8 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
