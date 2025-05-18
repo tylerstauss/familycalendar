@@ -116,13 +116,14 @@
 ## Known Issues/Blockers
 1. CoreGraphics NaN errors in view layouts causing potential UI issues
 2. Firebase AppCheck configuration failing on current platform
-3. Firestore permission issues preventing access to 'families' collection
+3. ~~Firestore permission issues preventing access to 'families' collection~~ (Fixed)
 4. Event editing and deletion needs to be implemented
 5. Meal editing and deletion needs to be implemented
 6. Google Calendar integration needs to be tested
 7. Shopping list generation feature pending
 
 ## Recent Updates
+- Fixed Firestore permission issues for family creation by implementing proper document creation using addDocument
 - Fixed build errors in DayView, WeekView, and MonthView related to @StateObject usage
 - Improved view model initialization in calendar views
 - Fixed actor isolation issues in DayViewModel

@@ -419,4 +419,104 @@ This document provides a comprehensive, step-by-step guide for building a family
 
 > **[JR DEV TIP]**: Take it step by step. Focus on getting each component working before moving to the next. Test thoroughly and don't hesitate to ask for help when needed.
 
+# FamilyCalendar Setup and Usage Instructions
+
+## Firebase Setup
+1. Create a Firebase project at https://console.firebase.google.com
+2. Add an iOS app to your Firebase project
+3. Download the GoogleService-Info.plist file
+4. Add the file to your Xcode project
+5. Enable Authentication and Firestore in the Firebase Console
+
+## Firestore Security Rules
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isFamilyMember(familyId) {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/families/$(familyId)) &&
+        get(/databases/$(database)/documents/families/$(familyId)).data.members.hasAny([{'userId': request.auth.uid}]);
+    }
+    
+    // User profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+    
+    // Family documents
+    match /families/{familyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && 
+        request.resource.data.members[0].userId == request.auth.uid &&
+        request.resource.data.members[0].role == 'owner';
+      allow update: if isFamilyMember(familyId);
+      allow delete: if isFamilyMember(familyId);
+    }
+  }
+}
+```
+
+## Family Creation Process
+1. User must be signed in
+2. Call `createFamily(name: String)` on FamilyViewModel
+3. The function will:
+   - Create a new family document using `addDocument`
+   - Set the current user as the owner
+   - Update local state with the new family
+4. The family document structure:
+   ```json
+   {
+     "name": "Family Name",
+     "creatorId": "user_id",
+     "members": [
+       {
+         "userId": "user_id",
+         "role": "owner"
+       }
+     ],
+     "createdAt": "timestamp"
+   }
+   ```
+
+## Error Handling
+- If family creation fails, check:
+  1. User is properly authenticated
+  2. Security rules are correctly configured
+  3. Network connection is available
+  4. Firebase project is properly set up
+
+## Testing
+1. Test family creation with a new user
+2. Verify the family document is created in Firestore
+3. Check that the user is set as the owner
+4. Verify local state is updated correctly
+
+## Troubleshooting
+1. If you get "Missing or insufficient permissions":
+   - Check that the user is signed in
+   - Verify the security rules are properly deployed
+   - Ensure the family document structure matches the rules
+2. If family creation fails:
+   - Check the Firebase Console logs
+   - Verify the user's authentication status
+   - Ensure all required fields are present
+
+## Best Practices
+1. Always use `addDocument` for creating new family documents
+2. Keep the member data structure simple and consistent
+3. Update local state only after successful document creation
+4. Implement proper error handling and user feedback
+5. Test thoroughly with different user scenarios
+
 
