@@ -42,7 +42,7 @@ export async function PUT(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const { id, name, color, ical_url } = await req.json();
+  const { id, name, color, ical_url, hidden } = await req.json();
   if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
 
   const url = (ical_url ?? "").trim();
@@ -58,6 +58,9 @@ export async function PUT(req: NextRequest) {
   }
   if (ical_url !== undefined) {
     db.prepare("UPDATE family_calendars SET ical_url = ? WHERE id = ? AND family_id = ?").run(url, id, familyId);
+  }
+  if (hidden !== undefined) {
+    db.prepare("UPDATE family_calendars SET hidden = ? WHERE id = ? AND family_id = ?").run(hidden ? 1 : 0, id, familyId);
   }
 
   return NextResponse.json(

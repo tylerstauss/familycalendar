@@ -95,6 +95,16 @@ if (!columns.some((c) => c.name === "ical_url")) {
   db.exec("ALTER TABLE family_members ADD COLUMN ical_url TEXT DEFAULT ''");
 }
 
+// Idempotent migration: add hidden column to family_members and family_calendars
+const famMemberCols = db.prepare("PRAGMA table_info(family_members)").all() as { name: string }[];
+if (!famMemberCols.some((c) => c.name === "hidden")) {
+  db.exec("ALTER TABLE family_members ADD COLUMN hidden INTEGER DEFAULT 0");
+}
+const famCalCols = db.prepare("PRAGMA table_info(family_calendars)").all() as { name: string }[];
+if (!famCalCols.some((c) => c.name === "hidden")) {
+  db.exec("ALTER TABLE family_calendars ADD COLUMN hidden INTEGER DEFAULT 0");
+}
+
 // Idempotent migrations: add family_id to all existing tables
 const tablesToMigrate = [
   "family_members",

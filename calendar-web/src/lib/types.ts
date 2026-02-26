@@ -18,6 +18,7 @@ export interface FamilyMember {
   name: string;
   color: string;
   ical_url?: string;
+  hidden?: boolean;
   created_at?: string;
 }
 
@@ -26,6 +27,7 @@ export interface FamilyCalendar {
   name: string;
   color: string;
   ical_url: string;
+  hidden?: boolean;
   created_at?: string;
 }
 

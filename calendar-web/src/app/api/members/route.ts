@@ -45,19 +45,26 @@ export async function PUT(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const { id, ical_url } = await req.json();
+  const { id, ical_url, hidden } = await req.json();
   if (!id) {
     return NextResponse.json({ error: "Member id is required" }, { status: 400 });
   }
 
-  const url = (ical_url || "").trim();
-  if (url && !url.startsWith("https://")) {
-    return NextResponse.json({ error: "URL must start with https://" }, { status: 400 });
+  if (hidden !== undefined) {
+    db.prepare(
+      "UPDATE family_members SET hidden = ? WHERE id = ? AND family_id = ?"
+    ).run(hidden ? 1 : 0, id, familyId);
   }
 
-  db.prepare(
-    "UPDATE family_members SET ical_url = ? WHERE id = ? AND family_id = ?"
-  ).run(url, id, familyId);
+  if (ical_url !== undefined) {
+    const url = (ical_url || "").trim();
+    if (url && !url.startsWith("https://")) {
+      return NextResponse.json({ error: "URL must start with https://" }, { status: 400 });
+    }
+    db.prepare(
+      "UPDATE family_members SET ical_url = ? WHERE id = ? AND family_id = ?"
+    ).run(url, id, familyId);
+  }
   const member = db
     .prepare("SELECT * FROM family_members WHERE id = ? AND family_id = ?")
     .get(id, familyId);

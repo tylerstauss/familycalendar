@@ -30,13 +30,13 @@ export async function GET(req: NextRequest) {
   // Get all members and family calendars with an ical_url configured
   const members = db
     .prepare(
-      "SELECT * FROM family_members WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != ''"
+      "SELECT * FROM family_members WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != '' AND (hidden = 0 OR hidden IS NULL)"
     )
     .all(familyId) as FamilyMember[];
 
   const familyCalendars = db
     .prepare(
-      "SELECT * FROM family_calendars WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != ''"
+      "SELECT * FROM family_calendars WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != '' AND (hidden = 0 OR hidden IS NULL)"
     )
     .all(familyId) as FamilyCalendar[];
 
