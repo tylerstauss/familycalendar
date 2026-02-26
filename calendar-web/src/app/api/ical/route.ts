@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { getIcalEvents, getFamilyCalendarEvents } from "@/lib/ical";
 import { FamilyMember, FamilyCalendar, CalendarEvent } from "@/lib/types";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth.error;
+  const { familyId } = auth.session;
+
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date");
   const start = searchParams.get("start");
@@ -24,12 +29,16 @@ export async function GET(req: NextRequest) {
 
   // Get all members and family calendars with an ical_url configured
   const members = db
-    .prepare("SELECT * FROM family_members WHERE ical_url IS NOT NULL AND ical_url != ''")
-    .all() as FamilyMember[];
+    .prepare(
+      "SELECT * FROM family_members WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != ''"
+    )
+    .all(familyId) as FamilyMember[];
 
   const familyCalendars = db
-    .prepare("SELECT * FROM family_calendars WHERE ical_url IS NOT NULL AND ical_url != ''")
-    .all() as FamilyCalendar[];
+    .prepare(
+      "SELECT * FROM family_calendars WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != ''"
+    )
+    .all(familyId) as FamilyCalendar[];
 
   if (members.length === 0 && familyCalendars.length === 0) {
     return NextResponse.json([]);
@@ -48,7 +57,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Sort by start time
   allEvents.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
   return NextResponse.json(allEvents);

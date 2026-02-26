@@ -1,3 +1,18 @@
+export interface User {
+  id: string;
+  familyId: string;
+  email: string;
+  name: string;
+  role: string;
+  createdAt?: string;
+}
+
+export interface Family {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
+
 export interface FamilyMember {
   id: string;
   name: string;

@@ -210,6 +210,7 @@ export default function CalendarPage() {
         ) : (
           <WeekView
             weekDays={weekDays}
+            events={events}
             members={members}
             onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
             now={now}
@@ -256,19 +257,69 @@ const W_HOUR_HEIGHT = 64; // px per hour
 const W_START = 7;        // 7 AM
 const W_END = 19;         // 7 PM
 const W_HOURS = W_END - W_START;
+const ALL_DAY_LANE_H = 24; // px per all-day event lane
+
+function isAllDayEvent(evt: CalendarEvent): boolean {
+  const s = new Date(evt.start_time);
+  const e = new Date(evt.end_time);
+  return (
+    s.getHours() === 0 && s.getMinutes() === 0 && s.getSeconds() === 0 &&
+    e.getHours() === 0 && e.getMinutes() === 0 && e.getSeconds() === 0 &&
+    e.getTime() - s.getTime() >= 86400000
+  );
+}
 
 function WeekView({
   weekDays,
+  events,
   members,
   onDayClick,
   now,
 }: {
   weekDays: { date: Date; events: CalendarEvent[] }[];
+  events: CalendarEvent[];
   members: FamilyMember[];
   onDayClick: (date: Date) => void;
   now: Date;
 }) {
   const hourLabels = Array.from({ length: W_HOURS + 1 }, (_, i) => W_START + i);
+
+  // ── All-day event layout ──────────────────────────────────────
+  const weekStartDate = weekDays[0].date;
+  const weekEndDate = addDays(weekDays[6].date, 1); // exclusive
+  const MS_PER_DAY = 86400000;
+
+  const allDayEvts = events.filter(isAllDayEvent).filter((evt) => {
+    const s = new Date(evt.start_time);
+    const e = new Date(evt.end_time);
+    return s < weekEndDate && e > weekStartDate;
+  });
+
+  // Sort by start date, then longer events first
+  allDayEvts.sort((a, b) => {
+    const d = new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
+    return d !== 0 ? d : new Date(b.end_time).getTime() - new Date(a.end_time).getTime();
+  });
+
+  type AllDayLayout = { evt: CalendarEvent; lane: number; startCol: number; spanCols: number };
+  const allDayLayouts: AllDayLayout[] = [];
+  const laneEndCols: number[] = [];
+
+  for (const evt of allDayEvts) {
+    const s = new Date(evt.start_time);
+    const e = new Date(evt.end_time);
+    const startCol = Math.max(0, Math.round((s.getTime() - weekStartDate.getTime()) / MS_PER_DAY));
+    const endCol = Math.min(7, Math.round((e.getTime() - weekStartDate.getTime()) / MS_PER_DAY));
+    const spanCols = endCol - startCol;
+    if (spanCols <= 0) continue;
+    let lane = laneEndCols.findIndex((ec) => ec <= startCol);
+    if (lane === -1) { lane = laneEndCols.length; laneEndCols.push(endCol); }
+    else { laneEndCols[lane] = endCol; }
+    allDayLayouts.push({ evt, lane, startCol, spanCols });
+  }
+
+  const numLanes = laneEndCols.length;
+  const allDayRowHeight = numLanes > 0 ? numLanes * ALL_DAY_LANE_H + 6 : 0;
 
   const getEventPos = (event: CalendarEvent) => {
     const start = new Date(event.start_time);
@@ -308,6 +359,39 @@ function WeekView({
         ))}
       </div>
 
+      {/* All-day events row */}
+      {allDayLayouts.length > 0 && (
+        <div className="flex border-b border-gray-100" style={{ minHeight: allDayRowHeight + 4 }}>
+          <div className="w-14 flex-shrink-0 border-r border-gray-100 flex items-start justify-end pr-2 pt-1.5">
+            <span className="text-[10px] text-gray-400 leading-none">all-day</span>
+          </div>
+          <div className="flex-1 relative" style={{ height: allDayRowHeight }}>
+            {allDayLayouts.map(({ evt, lane, startCol, spanCols }) => {
+              const member = members.find((m) => evt.assignee_ids.includes(m.id));
+              const color = evt.color || member?.color || "#6366F1";
+              return (
+                <div
+                  key={evt.id}
+                  className="absolute rounded-md px-1.5 overflow-hidden"
+                  style={{
+                    left: `calc(${(startCol / 7) * 100}% + 2px)`,
+                    width: `calc(${(spanCols / 7) * 100}% - 4px)`,
+                    top: lane * ALL_DAY_LANE_H + 3,
+                    height: ALL_DAY_LANE_H - 4,
+                    backgroundColor: color,
+                  }}
+                  title={evt.title}
+                >
+                  <p className="text-[11px] font-semibold leading-none truncate flex items-center h-full" style={{ color: getMemberTextColor(color) }}>
+                    {evt.title}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Scrollable grid */}
       <div className="flex overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
         {/* Time labels */}
@@ -345,7 +429,7 @@ function WeekView({
               )}
 
               {/* Events */}
-              {dayEvts.map((evt) => {
+              {dayEvts.filter((e) => !isAllDayEvent(e)).map((evt) => {
                 const pos = getEventPos(evt);
                 if (!pos) return null;
                 const member = members.find((m) => evt.assignee_ids.includes(m.id));

@@ -1,10 +1,10 @@
 import Database from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 
 const DB_PATH = path.join(process.cwd(), "data", "calendar.db");
 
 // Ensure data directory exists
-import fs from "fs";
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
@@ -12,8 +12,29 @@ const db = new Database(DB_PATH);
 // Enable WAL mode for better concurrent read performance
 db.pragma("journal_mode = WAL");
 
+// Helper to generate IDs (defined early so migrations can use it)
+export function newId(): string {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
 // Create tables
 db.exec(`
+  CREATE TABLE IF NOT EXISTS families (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    family_id TEXT NOT NULL REFERENCES families(id),
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT DEFAULT 'admin',
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS family_members (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -74,6 +95,38 @@ if (!columns.some((c) => c.name === "ical_url")) {
   db.exec("ALTER TABLE family_members ADD COLUMN ical_url TEXT DEFAULT ''");
 }
 
+// Idempotent migrations: add family_id to all existing tables
+const tablesToMigrate = [
+  "family_members",
+  "events",
+  "recipes",
+  "grocery_items",
+  "meal_plans",
+  "family_calendars",
+];
+for (const table of tablesToMigrate) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === "family_id")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN family_id TEXT DEFAULT ''`);
+  }
+}
+
+// Data migration: assign orphaned rows to a default family
+const orphanCheck = db.prepare(
+  "SELECT COUNT(*) as n FROM family_members WHERE family_id = ''"
+).get() as { n: number };
+
+if (orphanCheck.n > 0) {
+  const existing = db.prepare("SELECT id FROM families LIMIT 1").get() as { id: string } | undefined;
+  const defaultFamilyId = existing?.id ?? newId();
+  if (!existing) {
+    db.prepare("INSERT INTO families (id, name) VALUES (?, ?)").run(defaultFamilyId, "Default Family");
+  }
+  for (const table of tablesToMigrate) {
+    db.prepare(`UPDATE ${table} SET family_id = ? WHERE family_id = ''`).run(defaultFamilyId);
+  }
+}
+
 // Migration: update old bold member colors to new soft pastels
 const COLOR_MIGRATION: Record<string, string> = {
   "#4F46E5": "#E9D5FF", // indigo -> lavender
@@ -95,8 +148,3 @@ const migrateTransaction = db.transaction(() => {
 migrateTransaction();
 
 export default db;
-
-// Helper to generate IDs
-export function newId(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
-}
