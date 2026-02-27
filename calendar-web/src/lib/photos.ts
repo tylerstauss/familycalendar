@@ -1,22 +1,4 @@
-import fs from "fs";
-import path from "path";
-
-export const UPLOADS_DIR = path.join(process.cwd(), "data", "uploads");
-
-export function familyUploadDir(familyId: string): string {
-  const dir = path.join(UPLOADS_DIR, familyId);
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-export function photoFilePath(familyId: string, id: string, ext: string): string {
-  return path.join(familyUploadDir(familyId), `${id}${ext}`);
-}
-
-export function deletePhotoFile(familyId: string, filename: string): void {
-  const filePath = path.join(familyUploadDir(familyId), filename);
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-}
+import { put, del } from "@vercel/blob";
 
 const ALLOWED_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -27,4 +9,22 @@ const ALLOWED_TYPES: Record<string, string> = {
 
 export function getExtFromMime(mimeType: string): string | null {
   return ALLOWED_TYPES[mimeType] ?? null;
+}
+
+export async function uploadPhotoBlob(
+  familyId: string,
+  id: string,
+  ext: string,
+  buffer: Buffer,
+  contentType: string
+): Promise<string> {
+  const blob = await put(`photos/${familyId}/${id}${ext}`, buffer, {
+    access: "public",
+    contentType,
+  });
+  return blob.url;
+}
+
+export async function deletePhotoBlob(url: string): Promise<void> {
+  await del(url);
 }

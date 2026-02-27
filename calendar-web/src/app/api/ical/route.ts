@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db from "@/lib/db";
+import { sql } from "@/lib/db";
 import { getIcalEvents, getFamilyCalendarEvents } from "@/lib/ical";
 import { FamilyMember, FamilyCalendar, CalendarEvent } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
@@ -27,24 +27,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Provide ?date= or ?start=&end=" }, { status: 400 });
   }
 
-  // Get all members and family calendars with an ical_url configured
-  const members = db
-    .prepare(
-      "SELECT * FROM family_members WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != '' AND (hidden = 0 OR hidden IS NULL)"
-    )
-    .all(familyId) as FamilyMember[];
+  const members = (await sql`
+    SELECT * FROM family_members
+    WHERE family_id = ${familyId}
+      AND ical_url IS NOT NULL AND ical_url != ''
+      AND (hidden = 0 OR hidden IS NULL)
+  `) as FamilyMember[];
 
-  const familyCalendars = db
-    .prepare(
-      "SELECT * FROM family_calendars WHERE family_id = ? AND ical_url IS NOT NULL AND ical_url != '' AND (hidden = 0 OR hidden IS NULL)"
-    )
-    .all(familyId) as FamilyCalendar[];
+  const familyCalendars = (await sql`
+    SELECT * FROM family_calendars
+    WHERE family_id = ${familyId}
+      AND ical_url IS NOT NULL AND ical_url != ''
+      AND (hidden = 0 OR hidden IS NULL)
+  `) as FamilyCalendar[];
 
   if (members.length === 0 && familyCalendars.length === 0) {
     return NextResponse.json([]);
   }
 
-  // Fetch all feeds in parallel — one broken URL won't block others
   const results = await Promise.allSettled([
     ...members.map((m) => getIcalEvents(m.id, m.ical_url!, rangeStart, rangeEnd)),
     ...familyCalendars.map((c) => getFamilyCalendarEvents(c.id, c.color, c.ical_url, rangeStart, rangeEnd)),

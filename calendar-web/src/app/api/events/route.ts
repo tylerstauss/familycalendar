@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db, { newId } from "@/lib/db";
+import { sql, newId } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -8,23 +8,31 @@ export async function GET(req: NextRequest) {
   const { familyId } = auth.session;
 
   const { searchParams } = new URL(req.url);
-  const date = searchParams.get("date"); // YYYY-MM-DD
-  const start = searchParams.get("start"); // YYYY-MM-DD
-  const end = searchParams.get("end");     // YYYY-MM-DD
+  const date = searchParams.get("date");
+  const start = searchParams.get("start");
+  const end = searchParams.get("end");
 
   let events;
   if (date) {
-    events = db.prepare(
-      "SELECT * FROM events WHERE family_id = ? AND date(start_time) = ? ORDER BY start_time"
-    ).all(familyId, date) as Record<string, unknown>[];
+    events = await sql`
+      SELECT * FROM events
+      WHERE family_id = ${familyId} AND LEFT(start_time, 10) = ${date}
+      ORDER BY start_time
+    `;
   } else if (start && end) {
-    events = db.prepare(
-      "SELECT * FROM events WHERE family_id = ? AND date(start_time) <= ? AND date(end_time) >= ? ORDER BY start_time"
-    ).all(familyId, end, start) as Record<string, unknown>[];
+    events = await sql`
+      SELECT * FROM events
+      WHERE family_id = ${familyId}
+        AND LEFT(start_time, 10) <= ${end}
+        AND LEFT(end_time, 10) >= ${start}
+      ORDER BY start_time
+    `;
   } else {
-    events = db.prepare(
-      "SELECT * FROM events WHERE family_id = ? ORDER BY start_time DESC LIMIT 100"
-    ).all(familyId) as Record<string, unknown>[];
+    events = await sql`
+      SELECT * FROM events
+      WHERE family_id = ${familyId}
+      ORDER BY start_time DESC LIMIT 100
+    `;
   }
 
   const parsed = events.map((e: Record<string, unknown>) => ({
@@ -48,15 +56,16 @@ export async function POST(req: NextRequest) {
   }
 
   const id = newId();
-  db.prepare(
-    "INSERT INTO events (id, family_id, title, start_time, end_time, location, notes, assignee_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, familyId, title.trim(), start_time, end_time, location || "", notes || "", JSON.stringify(assignee_ids || []));
+  await sql`
+    INSERT INTO events (id, family_id, title, start_time, end_time, location, notes, assignee_ids)
+    VALUES (${id}, ${familyId}, ${title.trim()}, ${start_time}, ${end_time}, ${location || ""}, ${notes || ""}, ${JSON.stringify(assignee_ids || [])})
+  `;
 
-  const event = db.prepare("SELECT * FROM events WHERE id = ? AND family_id = ?").get(id, familyId) as Record<string, unknown>;
-  return NextResponse.json({
-    ...event,
-    assignee_ids: JSON.parse((event.assignee_ids as string) || "[]"),
-  }, { status: 201 });
+  const [event] = await sql`SELECT * FROM events WHERE id = ${id} AND family_id = ${familyId}`;
+  return NextResponse.json(
+    { ...event, assignee_ids: JSON.parse((event.assignee_ids as string) || "[]") },
+    { status: 201 }
+  );
 }
 
 export async function PUT(req: NextRequest) {
@@ -69,15 +78,15 @@ export async function PUT(req: NextRequest) {
 
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
-  db.prepare(
-    "UPDATE events SET title=?, start_time=?, end_time=?, location=?, notes=?, assignee_ids=? WHERE id=? AND family_id=?"
-  ).run(title, start_time, end_time, location || "", notes || "", JSON.stringify(assignee_ids || []), id, familyId);
+  await sql`
+    UPDATE events
+    SET title = ${title}, start_time = ${start_time}, end_time = ${end_time},
+        location = ${location || ""}, notes = ${notes || ""}, assignee_ids = ${JSON.stringify(assignee_ids || [])}
+    WHERE id = ${id} AND family_id = ${familyId}
+  `;
 
-  const event = db.prepare("SELECT * FROM events WHERE id = ? AND family_id = ?").get(id, familyId) as Record<string, unknown>;
-  return NextResponse.json({
-    ...event,
-    assignee_ids: JSON.parse((event.assignee_ids as string) || "[]"),
-  });
+  const [event] = await sql`SELECT * FROM events WHERE id = ${id} AND family_id = ${familyId}`;
+  return NextResponse.json({ ...event, assignee_ids: JSON.parse((event.assignee_ids as string) || "[]") });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -86,6 +95,6 @@ export async function DELETE(req: NextRequest) {
   const { familyId } = auth.session;
 
   const { id } = await req.json();
-  db.prepare("DELETE FROM events WHERE id = ? AND family_id = ?").run(id, familyId);
+  await sql`DELETE FROM events WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ok: true });
 }

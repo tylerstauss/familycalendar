@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import db from "@/lib/db";
+import { sql } from "@/lib/db";
 import { signSession, setSessionCookie } from "@/lib/auth";
 
 interface UserRow {
@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
   }
 
-  const user = db
-    .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.toLowerCase().trim()) as UserRow | undefined;
+  const normalizedEmail = email.toLowerCase().trim();
+  const rows = await sql`SELECT * FROM users WHERE email = ${normalizedEmail}`;
+  const user = rows[0] as UserRow | undefined;
 
   if (!user) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });

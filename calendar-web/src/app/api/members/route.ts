@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db, { newId } from "@/lib/db";
+import { sql, newId } from "@/lib/db";
 import { MEMBER_COLORS } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
 
@@ -8,9 +8,9 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const members = db
-    .prepare("SELECT * FROM family_members WHERE family_id = ? ORDER BY created_at")
-    .all(familyId);
+  const members = await sql`
+    SELECT * FROM family_members WHERE family_id = ${familyId} ORDER BY created_at
+  `;
   return NextResponse.json(members);
 }
 
@@ -24,19 +24,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const count = db
-    .prepare("SELECT COUNT(*) as count FROM family_members WHERE family_id = ?")
-    .get(familyId) as { count: number };
-  const color = MEMBER_COLORS[count.count % MEMBER_COLORS.length];
+  const [countRow] = await sql`
+    SELECT COUNT(*) as count FROM family_members WHERE family_id = ${familyId}
+  `;
+  const count = parseInt(countRow.count as string, 10);
+  const color = MEMBER_COLORS[count % MEMBER_COLORS.length];
   const id = newId();
 
-  db.prepare(
-    "INSERT INTO family_members (id, family_id, name, color) VALUES (?, ?, ?, ?)"
-  ).run(id, familyId, name.trim(), color);
+  await sql`
+    INSERT INTO family_members (id, family_id, name, color) VALUES (${id}, ${familyId}, ${name.trim()}, ${color})
+  `;
 
-  const member = db
-    .prepare("SELECT * FROM family_members WHERE id = ? AND family_id = ?")
-    .get(id, familyId);
+  const [member] = await sql`
+    SELECT * FROM family_members WHERE id = ${id} AND family_id = ${familyId}
+  `;
   return NextResponse.json(member, { status: 201 });
 }
 
@@ -51,9 +52,9 @@ export async function PUT(req: NextRequest) {
   }
 
   if (hidden !== undefined) {
-    db.prepare(
-      "UPDATE family_members SET hidden = ? WHERE id = ? AND family_id = ?"
-    ).run(hidden ? 1 : 0, id, familyId);
+    await sql`
+      UPDATE family_members SET hidden = ${hidden ? 1 : 0} WHERE id = ${id} AND family_id = ${familyId}
+    `;
   }
 
   if (ical_url !== undefined) {
@@ -61,13 +62,14 @@ export async function PUT(req: NextRequest) {
     if (url && !url.startsWith("https://")) {
       return NextResponse.json({ error: "URL must start with https://" }, { status: 400 });
     }
-    db.prepare(
-      "UPDATE family_members SET ical_url = ? WHERE id = ? AND family_id = ?"
-    ).run(url, id, familyId);
+    await sql`
+      UPDATE family_members SET ical_url = ${url} WHERE id = ${id} AND family_id = ${familyId}
+    `;
   }
-  const member = db
-    .prepare("SELECT * FROM family_members WHERE id = ? AND family_id = ?")
-    .get(id, familyId);
+
+  const [member] = await sql`
+    SELECT * FROM family_members WHERE id = ${id} AND family_id = ${familyId}
+  `;
   return NextResponse.json(member);
 }
 
@@ -77,6 +79,6 @@ export async function DELETE(req: NextRequest) {
   const { familyId } = auth.session;
 
   const { id } = await req.json();
-  db.prepare("DELETE FROM family_members WHERE id = ? AND family_id = ?").run(id, familyId);
+  await sql`DELETE FROM family_members WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ok: true });
 }

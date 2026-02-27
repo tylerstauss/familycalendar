@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import db, { newId } from "@/lib/db";
+import { sql, newId } from "@/lib/db";
 import { signSession, setSessionCookie } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -19,9 +19,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
   }
 
-  // Check email not already taken
-  const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email.toLowerCase().trim());
-  if (existing) {
+  const normalizedEmail = email.toLowerCase().trim();
+
+  const existing = await sql`SELECT id FROM users WHERE email = ${normalizedEmail}`;
+  if (existing.length > 0) {
     return NextResponse.json({ error: "Email already in use" }, { status: 409 });
   }
 
@@ -29,18 +30,14 @@ export async function POST(req: NextRequest) {
   const familyId = newId();
   const userId = newId();
 
-  // Insert family + user in a transaction
-  const insert = db.transaction(() => {
-    db.prepare("INSERT INTO families (id, name) VALUES (?, ?)").run(familyId, familyName.trim());
-    db.prepare(
-      "INSERT INTO users (id, family_id, email, password_hash, name) VALUES (?, ?, ?, ?, ?)"
-    ).run(userId, familyId, email.toLowerCase().trim(), passwordHash, name.trim());
-  });
-  insert();
+  await sql.transaction([
+    sql`INSERT INTO families (id, name) VALUES (${familyId}, ${familyName.trim()})`,
+    sql`INSERT INTO users (id, family_id, email, password_hash, name) VALUES (${userId}, ${familyId}, ${normalizedEmail}, ${passwordHash}, ${name.trim()})`,
+  ]);
 
-  const token = await signSession({ userId, familyId, email: email.toLowerCase().trim(), name: name.trim() });
+  const token = await signSession({ userId, familyId, email: normalizedEmail, name: name.trim() });
   const res = NextResponse.json(
-    { user: { id: userId, name: name.trim(), email: email.toLowerCase().trim(), familyId } },
+    { user: { id: userId, name: name.trim(), email: normalizedEmail, familyId } },
     { status: 201 }
   );
   return setSessionCookie(res, token);

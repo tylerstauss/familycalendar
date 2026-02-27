@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db, { newId } from "@/lib/db";
+import { sql, newId } from "@/lib/db";
 import { FAMILY_CALENDAR_COLORS } from "@/lib/types";
 import { requireAuth } from "@/lib/auth";
 
@@ -8,9 +8,9 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const calendars = db
-    .prepare("SELECT * FROM family_calendars WHERE family_id = ? ORDER BY created_at")
-    .all(familyId);
+  const calendars = await sql`
+    SELECT * FROM family_calendars WHERE family_id = ${familyId} ORDER BY created_at
+  `;
   return NextResponse.json(calendars);
 }
 
@@ -23,18 +23,22 @@ export async function POST(req: NextRequest) {
   if (!name?.trim()) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
-  const count = db
-    .prepare("SELECT COUNT(*) as count FROM family_calendars WHERE family_id = ?")
-    .get(familyId) as { count: number };
-  const chosenColor = color || FAMILY_CALENDAR_COLORS[count.count % FAMILY_CALENDAR_COLORS.length];
+
+  const [countRow] = await sql`
+    SELECT COUNT(*) as count FROM family_calendars WHERE family_id = ${familyId}
+  `;
+  const count = parseInt(countRow.count as string, 10);
+  const chosenColor = color || FAMILY_CALENDAR_COLORS[count % FAMILY_CALENDAR_COLORS.length];
   const id = newId();
-  db.prepare(
-    "INSERT INTO family_calendars (id, family_id, name, color) VALUES (?, ?, ?, ?)"
-  ).run(id, familyId, name.trim(), chosenColor);
-  return NextResponse.json(
-    db.prepare("SELECT * FROM family_calendars WHERE id = ? AND family_id = ?").get(id, familyId),
-    { status: 201 }
-  );
+
+  await sql`
+    INSERT INTO family_calendars (id, family_id, name, color) VALUES (${id}, ${familyId}, ${name.trim()}, ${chosenColor})
+  `;
+
+  const [cal] = await sql`
+    SELECT * FROM family_calendars WHERE id = ${id} AND family_id = ${familyId}
+  `;
+  return NextResponse.json(cal, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {
@@ -51,21 +55,22 @@ export async function PUT(req: NextRequest) {
   }
 
   if (name !== undefined) {
-    db.prepare("UPDATE family_calendars SET name = ? WHERE id = ? AND family_id = ?").run(name.trim(), id, familyId);
+    await sql`UPDATE family_calendars SET name = ${name.trim()} WHERE id = ${id} AND family_id = ${familyId}`;
   }
   if (color !== undefined) {
-    db.prepare("UPDATE family_calendars SET color = ? WHERE id = ? AND family_id = ?").run(color, id, familyId);
+    await sql`UPDATE family_calendars SET color = ${color} WHERE id = ${id} AND family_id = ${familyId}`;
   }
   if (ical_url !== undefined) {
-    db.prepare("UPDATE family_calendars SET ical_url = ? WHERE id = ? AND family_id = ?").run(url, id, familyId);
+    await sql`UPDATE family_calendars SET ical_url = ${url} WHERE id = ${id} AND family_id = ${familyId}`;
   }
   if (hidden !== undefined) {
-    db.prepare("UPDATE family_calendars SET hidden = ? WHERE id = ? AND family_id = ?").run(hidden ? 1 : 0, id, familyId);
+    await sql`UPDATE family_calendars SET hidden = ${hidden ? 1 : 0} WHERE id = ${id} AND family_id = ${familyId}`;
   }
 
-  return NextResponse.json(
-    db.prepare("SELECT * FROM family_calendars WHERE id = ? AND family_id = ?").get(id, familyId)
-  );
+  const [cal] = await sql`
+    SELECT * FROM family_calendars WHERE id = ${id} AND family_id = ${familyId}
+  `;
+  return NextResponse.json(cal);
 }
 
 export async function DELETE(req: NextRequest) {
@@ -74,6 +79,6 @@ export async function DELETE(req: NextRequest) {
   const { familyId } = auth.session;
 
   const { id } = await req.json();
-  db.prepare("DELETE FROM family_calendars WHERE id = ? AND family_id = ?").run(id, familyId);
+  await sql`DELETE FROM family_calendars WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ok: true });
 }

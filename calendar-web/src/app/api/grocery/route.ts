@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import db, { newId } from "@/lib/db";
+import { sql, newId } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
@@ -7,9 +7,9 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const items = db
-    .prepare("SELECT * FROM grocery_items WHERE family_id = ? ORDER BY checked, created_at DESC")
-    .all(familyId) as Record<string, unknown>[];
+  const items = await sql`
+    SELECT * FROM grocery_items WHERE family_id = ${familyId} ORDER BY checked, created_at DESC
+  `;
   const parsed = items.map((i: Record<string, unknown>) => ({
     ...i,
     checked: Boolean(i.checked),
@@ -28,13 +28,12 @@ export async function POST(req: NextRequest) {
   }
 
   const id = newId();
-  db.prepare(
-    "INSERT INTO grocery_items (id, family_id, name, recipe_id) VALUES (?, ?, ?, ?)"
-  ).run(id, familyId, name.trim(), recipe_id || null);
+  await sql`
+    INSERT INTO grocery_items (id, family_id, name, recipe_id)
+    VALUES (${id}, ${familyId}, ${name.trim()}, ${recipe_id || null})
+  `;
 
-  const item = db
-    .prepare("SELECT * FROM grocery_items WHERE id = ? AND family_id = ?")
-    .get(id, familyId) as Record<string, unknown>;
+  const [item] = await sql`SELECT * FROM grocery_items WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ...item, checked: Boolean(item.checked) }, { status: 201 });
 }
 
@@ -47,15 +46,13 @@ export async function PUT(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
   if (name !== undefined) {
-    db.prepare("UPDATE grocery_items SET name=? WHERE id=? AND family_id=?").run(name, id, familyId);
+    await sql`UPDATE grocery_items SET name = ${name} WHERE id = ${id} AND family_id = ${familyId}`;
   }
   if (checked !== undefined) {
-    db.prepare("UPDATE grocery_items SET checked=? WHERE id=? AND family_id=?").run(checked ? 1 : 0, id, familyId);
+    await sql`UPDATE grocery_items SET checked = ${checked ? 1 : 0} WHERE id = ${id} AND family_id = ${familyId}`;
   }
 
-  const item = db
-    .prepare("SELECT * FROM grocery_items WHERE id = ? AND family_id = ?")
-    .get(id, familyId) as Record<string, unknown>;
+  const [item] = await sql`SELECT * FROM grocery_items WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ...item, checked: Boolean(item.checked) });
 }
 
@@ -67,9 +64,9 @@ export async function DELETE(req: NextRequest) {
   const { id, clear_checked } = await req.json();
 
   if (clear_checked) {
-    db.prepare("DELETE FROM grocery_items WHERE family_id = ? AND checked = 1").run(familyId);
+    await sql`DELETE FROM grocery_items WHERE family_id = ${familyId} AND checked = 1`;
   } else if (id) {
-    db.prepare("DELETE FROM grocery_items WHERE id = ? AND family_id = ?").run(id, familyId);
+    await sql`DELETE FROM grocery_items WHERE id = ${id} AND family_id = ${familyId}`;
   }
 
   return NextResponse.json({ ok: true });

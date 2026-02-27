@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { format, addDays, subDays, isToday, startOfWeek, endOfWeek, isSameDay } from "date-fns";
+import { format, addDays, subDays, addMonths, subMonths, isToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isSameDay, isSameMonth } from "date-fns";
 import { CalendarEvent, FamilyMember, MealPlan, getMemberColumnBg, getMemberTextColor } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import AddEventModal from "@/components/AddEventModal";
@@ -13,7 +13,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
-  const [viewMode, setViewMode] = useState<"day" | "week">("day");
+  const [viewMode, setViewMode] = useState<"day" | "week" | "month">("day");
   const [now, setNow] = useState(new Date());
 
   // Update clock every minute
@@ -35,10 +35,15 @@ export default function CalendarPage() {
     let params: string;
     if (viewMode === "day") {
       params = `date=${dateStr}`;
-    } else {
+    } else if (viewMode === "week") {
       const ws = startOfWeek(selectedDate, { weekStartsOn: 0 });
       const we = endOfWeek(selectedDate, { weekStartsOn: 0 });
       params = `start=${format(ws, "yyyy-MM-dd")}&end=${format(we, "yyyy-MM-dd")}`;
+    } else {
+      // Month view — fetch the full grid (may include days from prev/next month)
+      const ms = startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 });
+      const me = endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 });
+      params = `start=${format(ms, "yyyy-MM-dd")}&end=${format(me, "yyyy-MM-dd")}`;
     }
 
     // Fetch local, iCal events, and meal plans in parallel
@@ -89,7 +94,11 @@ export default function CalendarPage() {
   }, [fetchEvents]);
 
   const navigateDate = (dir: number) => {
-    setSelectedDate((d) => (dir > 0 ? addDays(d, viewMode === "day" ? 1 : 7) : subDays(d, viewMode === "day" ? 1 : 7)));
+    setSelectedDate((d) => {
+      if (viewMode === "month") return dir > 0 ? addMonths(d, 1) : subMonths(d, 1);
+      if (viewMode === "week") return dir > 0 ? addDays(d, 7) : subDays(d, 7);
+      return dir > 0 ? addDays(d, 1) : subDays(d, 1);
+    });
   };
 
   const handleAddEvent = async (event: Omit<CalendarEvent, "id" | "created_at">) => {
@@ -137,9 +146,11 @@ export default function CalendarPage() {
           {/* Left: date + time */}
           <div className="flex items-baseline gap-3">
             <h1 className="text-2xl font-bold text-gray-900">
-              {format(selectedDate, "EEE, MMM d")}
+              {viewMode === "month"
+                ? format(selectedDate, "MMMM yyyy")
+                : format(selectedDate, "EEE, MMM d")}
             </h1>
-            {isToday(selectedDate) && (
+            {viewMode !== "month" && isToday(selectedDate) && (
               <span className="text-lg text-gray-400 font-medium">
                 {format(now, "h:mm a")}
               </span>
@@ -148,7 +159,7 @@ export default function CalendarPage() {
 
           {/* Right: controls */}
           <div className="flex items-center gap-2">
-            {/* Day/Week toggle */}
+            {/* Day/Week/Month toggle */}
             <div className="bg-gray-100 rounded-xl p-0.5 flex">
               <button
                 onClick={() => setViewMode("day")}
@@ -161,6 +172,12 @@ export default function CalendarPage() {
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${viewMode === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
               >
                 Week
+              </button>
+              <button
+                onClick={() => setViewMode("month")}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${viewMode === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+              >
+                Month
               </button>
             </div>
 
@@ -184,10 +201,16 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Week range subtitle for week view */}
+        {/* Week range subtitle */}
         {viewMode === "week" && (
           <p className="text-sm text-gray-400 mt-1">
             {format(weekStart, "MMM d")} &ndash; {format(weekEnd, "MMM d, yyyy")}
+          </p>
+        )}
+        {/* Month subtitle — how many events this month */}
+        {viewMode === "month" && events.length > 0 && (
+          <p className="text-sm text-gray-400 mt-1">
+            {events.length} event{events.length !== 1 ? "s" : ""}
           </p>
         )}
       </header>
@@ -207,9 +230,17 @@ export default function CalendarPage() {
             now={now}
             selectedDate={selectedDate}
           />
-        ) : (
+        ) : viewMode === "week" ? (
           <WeekView
             weekDays={weekDays}
+            events={events}
+            members={members}
+            onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
+            now={now}
+          />
+        ) : (
+          <MonthView
+            selectedDate={selectedDate}
             events={events}
             members={members}
             onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
@@ -669,6 +700,126 @@ function DayView({
           </svg>
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Month Grid ──────────────────────────────────────────────────
+
+const MAX_EVENTS_PER_DAY = 3;
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function MonthView({
+  selectedDate,
+  events,
+  members,
+  onDayClick,
+  now,
+}: {
+  selectedDate: Date;
+  events: CalendarEvent[];
+  members: FamilyMember[];
+  onDayClick: (date: Date) => void;
+  now: Date;
+}) {
+  const monthStart = startOfMonth(selectedDate);
+  const monthEnd = endOfMonth(selectedDate);
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+
+  // Build array of all days in the grid
+  const days: Date[] = [];
+  for (let d = new Date(gridStart); d <= gridEnd; d = addDays(d, 1)) {
+    days.push(new Date(d));
+  }
+  // Split into weeks
+  const weeks: Date[][] = [];
+  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+
+  return (
+    <div
+      className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden bg-white"
+      style={{ height: "calc(100vh - 165px)" }}
+    >
+      {/* Day-of-week header */}
+      <div className="grid grid-cols-7 border-b border-gray-100 flex-shrink-0">
+        {DAY_NAMES.map((name) => (
+          <div key={name} className="py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            {name}
+          </div>
+        ))}
+      </div>
+
+      {/* Week rows — fill remaining height equally */}
+      <div
+        className="flex-1 grid min-h-0"
+        style={{ gridTemplateRows: `repeat(${weeks.length}, 1fr)` }}
+      >
+        {weeks.map((week, wi) => (
+          <div
+            key={wi}
+            className={`grid grid-cols-7 ${wi < weeks.length - 1 ? "border-b border-gray-100" : ""}`}
+          >
+            {week.map((day, di) => {
+              const inMonth = isSameMonth(day, selectedDate);
+              const today = isSameDay(day, now);
+              const dayEvts = events
+                .filter((e) => isSameDay(new Date(e.start_time), day))
+                .slice(0, MAX_EVENTS_PER_DAY + 1); // +1 so we know if there's overflow
+              const shown = dayEvts.slice(0, MAX_EVENTS_PER_DAY);
+              const overflow = dayEvts.length - MAX_EVENTS_PER_DAY;
+
+              return (
+                <button
+                  key={di}
+                  onClick={() => onDayClick(day)}
+                  className={`text-left p-1.5 overflow-hidden transition-colors hover:bg-indigo-50/40 focus:outline-none ${
+                    di < 6 ? "border-r border-gray-100" : ""
+                  } ${!inMonth ? "bg-gray-50/60" : ""}`}
+                >
+                  {/* Date number */}
+                  <span
+                    className={`text-sm font-semibold inline-flex w-6 h-6 items-center justify-center rounded-full leading-none ${
+                      today
+                        ? "bg-indigo-500 text-white"
+                        : inMonth
+                        ? "text-gray-800"
+                        : "text-gray-300"
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </span>
+
+                  {/* Event chips */}
+                  <div className="mt-0.5 space-y-0.5">
+                    {shown.map((evt) => {
+                      const member = members.find((m) => evt.assignee_ids.includes(m.id));
+                      const color = evt.color || member?.color || "#6366F1";
+                      const textColor = getMemberTextColor(color);
+                      const isMeal = evt.source === "meal";
+                      return (
+                        <div
+                          key={evt.id}
+                          className="text-[10px] font-medium px-1 py-px rounded leading-tight truncate"
+                          style={{ backgroundColor: color, color: textColor }}
+                          title={evt.title}
+                        >
+                          {isMeal ? "🍽 " : ""}{evt.title}
+                        </div>
+                      );
+                    })}
+                    {overflow > 0 && (
+                      <p className="text-[10px] text-indigo-400 font-medium pl-0.5">
+                        +{overflow} more
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
