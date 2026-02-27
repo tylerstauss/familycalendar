@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { FamilyMember, FamilyCalendar, MEMBER_COLORS, FAMILY_CALENDAR_COLORS, getMemberTextColor } from "@/lib/types";
+import { useState, useEffect, useRef } from "react";
+import { FamilyMember, FamilyCalendar, Photo, MEMBER_COLORS, FAMILY_CALENDAR_COLORS, getMemberTextColor } from "@/lib/types";
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([]);
@@ -22,6 +22,12 @@ export default function SettingsPage() {
   const [newCalUrl, setNewCalUrl] = useState("");
   const [addingCal, setAddingCal] = useState(false);
 
+  // Photos state
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const fetchMembers = async () => {
     const res = await fetch("/api/members");
     const data: FamilyMember[] = await res.json();
@@ -40,7 +46,13 @@ export default function SettingsPage() {
     setCalUrls(urls);
   };
 
-  useEffect(() => { fetchMembers(); fetchFamilyCalendars(); }, []);
+  const fetchPhotos = async () => {
+    const res = await fetch("/api/photos");
+    const data: Photo[] = await res.json();
+    setPhotos(data);
+  };
+
+  useEffect(() => { fetchMembers(); fetchFamilyCalendars(); fetchPhotos(); }, []);
 
   const handleAdd = async () => {
     const name = newMember.trim();
@@ -146,6 +158,34 @@ export default function SettingsPage() {
   const isCalDirty = (calId: string) => {
     const cal = familyCalendars.find((c) => c.id === calId);
     return (calUrls[calId] || "") !== (cal?.ical_url || "");
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadError("");
+    const form = new FormData();
+    form.append("file", file);
+    setUploading(true);
+    const res = await fetch("/api/photos", { method: "POST", body: form });
+    setUploading(false);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+    if (!res.ok) {
+      const data = await res.json();
+      setUploadError(data.error ?? "Upload failed");
+    } else {
+      fetchPhotos();
+    }
+  };
+
+  const handleDeletePhoto = async (id: string) => {
+    if (!confirm("Remove this photo?")) return;
+    await fetch("/api/photos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    fetchPhotos();
   };
 
   return (
@@ -419,6 +459,61 @@ export default function SettingsPage() {
           {members.length === 0 && (
             <p className="text-sm text-gray-400">Add family members to see their colors.</p>
           )}
+        </section>
+
+        {/* Photos */}
+        <section className="bg-white rounded-2xl border border-gray-100 p-5">
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-semibold text-gray-900">Photos</h2>
+            <span className="text-sm text-gray-400">{photos.length} of 10</span>
+          </div>
+          <p className="text-sm text-gray-400 mb-4">
+            Upload up to 10 family photos for the Photos slideshow.
+          </p>
+
+          {photos.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {photos.map((photo) => (
+                <div key={photo.id} className="relative group aspect-square">
+                  <img
+                    src={`/api/photos/${photo.id}`}
+                    alt={photo.original_name}
+                    className="w-full h-full object-cover rounded-xl"
+                  />
+                  <button
+                    onClick={() => handleDeletePhoto(photo.id)}
+                    className="absolute top-1 right-1 w-7 h-7 bg-black/60 text-white rounded-full flex items-center justify-center opacity-70 hover:opacity-100 transition-opacity text-sm leading-none hover:bg-black/80"
+                    title="Remove photo"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {uploadError && (
+            <p className="text-red-500 text-sm mb-3">{uploadError}</p>
+          )}
+
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoUpload}
+          />
+          <button
+            onClick={() => { setUploadError(""); photoInputRef.current?.click(); }}
+            disabled={uploading || photos.length >= 10}
+            title={photos.length >= 10 ? "Maximum 10 photos reached" : undefined}
+            className="flex items-center gap-1.5 text-sm text-indigo-500 hover:text-indigo-700 font-medium py-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            {uploading ? "Uploading..." : "Add Photo"}
+          </button>
         </section>
 
         {/* About */}

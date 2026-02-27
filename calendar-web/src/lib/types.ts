@@ -60,6 +60,12 @@ export interface GroceryItem {
   created_at?: string;
 }
 
+export interface Photo {
+  id: string;
+  original_name: string;
+  created_at?: string;
+}
+
 export interface MealPlan {
   id: string;
   date: string;         // YYYY-MM-DD

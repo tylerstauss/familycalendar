@@ -34,3 +34,8 @@ html {
   outline: 2px solid #A5B4FC;
   outline-offset: 2px;
 }
+
+/* Safe area padding for devices with home indicator */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

@@ -177,8 +177,8 @@ function WeeklyMealPlan({ weekDays, mealPlans, recipes, members, onAssign, onRem
                     {plan ? (
                       <div className="bg-gray-50 rounded-xl p-2 flex items-center justify-between">
                         <span className="text-sm font-medium text-gray-800">{plan.recipe_name}</span>
-                        <button onClick={() => onRemove(plan.id)} className="text-gray-400 hover:text-red-500 text-xs ml-1">
-                          &times;
+                        <button onClick={() => onRemove(plan.id)} className="text-gray-400 hover:text-red-500 p-1.5 -mr-1 rounded-lg">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                       </div>
                     ) : (
@@ -215,7 +215,7 @@ function QuickAssign({ recipes, onSelect }: {
     <div className="space-y-1">
       {recipes.slice(0, 5).map((r) => (
         <button key={r.id} onClick={() => { onSelect(r.name, r.id); setOpen(false); }}
-          className="block w-full text-left text-sm px-2 py-1 rounded-lg hover:bg-indigo-50 text-gray-700 truncate">
+          className="block w-full text-left text-sm px-2 py-2.5 rounded-lg hover:bg-indigo-50 text-gray-700 truncate">
           {r.name}
         </button>
       ))}
@@ -223,7 +223,9 @@ function QuickAssign({ recipes, onSelect }: {
         <input type="text" value={custom} onChange={(e) => setCustom(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && custom.trim()) { onSelect(custom.trim()); setOpen(false); setCustom(""); } }}
           className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded-lg text-gray-900" placeholder="Custom meal" />
-        <button onClick={() => setOpen(false)} className="text-xs text-gray-400 px-1">&times;</button>
+        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 p-2 rounded-lg shrink-0">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
       </div>
     </div>
   );
