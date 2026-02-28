@@ -45,7 +45,14 @@ export async function POST(req: NextRequest) {
 
   const id = newId();
   const buffer = Buffer.from(await file.arrayBuffer());
-  const blobUrl = await uploadPhotoBlob(familyId, id, ext, buffer, file.type);
+
+  let blobUrl: string;
+  try {
+    blobUrl = await uploadPhotoBlob(familyId, id, ext, buffer, file.type);
+  } catch (err) {
+    console.error("Blob upload failed:", err);
+    return NextResponse.json({ error: "Upload to storage failed" }, { status: 500 });
+  }
 
   const filename = `${id}${ext}`;
   await sql`

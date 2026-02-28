@@ -171,8 +171,12 @@ export default function SettingsPage() {
     setUploading(false);
     if (photoInputRef.current) photoInputRef.current.value = "";
     if (!res.ok) {
-      const data = await res.json();
-      setUploadError(data.error ?? "Upload failed");
+      let message = "Upload failed";
+      try {
+        const data = await res.json();
+        message = data.error ?? message;
+      } catch {}
+      setUploadError(message);
     } else {
       fetchPhotos();
     }
