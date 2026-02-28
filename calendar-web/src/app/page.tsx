@@ -34,7 +34,7 @@ export default function CalendarPage() {
 
     let params: string;
     if (viewMode === "day") {
-      params = `date=${dateStr}`;
+      params = `start=${dateStr}&end=${dateStr}`;
     } else if (viewMode === "week") {
       const ws = startOfWeek(selectedDate, { weekStartsOn: 0 });
       const we = endOfWeek(selectedDate, { weekStartsOn: 0 });
@@ -135,7 +135,16 @@ export default function CalendarPage() {
   const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const day = addDays(weekStart, i);
-    return { date: day, events: events.filter((e) => isSameDay(new Date(e.start_time), day)) };
+    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    return {
+      date: day,
+      events: events.filter((e) => {
+        const s = new Date(e.start_time);
+        const en = new Date(e.end_time);
+        return s < dayEnd && en > dayStart;
+      }),
+    };
   });
 
   return (
@@ -352,11 +361,14 @@ function WeekView({
   const numLanes = laneEndCols.length;
   const allDayRowHeight = numLanes > 0 ? numLanes * ALL_DAY_LANE_H + 6 : 0;
 
-  const getEventPos = (event: CalendarEvent) => {
+  const getEventPos = (event: CalendarEvent, colDate: Date) => {
     const start = new Date(event.start_time);
     const end = new Date(event.end_time);
-    const startMins = start.getHours() * 60 + start.getMinutes();
-    const endMins = end.getHours() * 60 + end.getMinutes();
+    const colStart = new Date(colDate.getFullYear(), colDate.getMonth(), colDate.getDate());
+    const colEnd = new Date(colDate.getFullYear(), colDate.getMonth(), colDate.getDate() + 1);
+    if (start >= colEnd || end <= colStart) return null;
+    const startMins = start < colStart ? 0 : start.getHours() * 60 + start.getMinutes();
+    const endMins = end >= colEnd ? W_END * 60 : end.getHours() * 60 + end.getMinutes();
     if (startMins >= W_END * 60) return null;
     const top = Math.max((startMins - W_START * 60) / 60 * W_HOUR_HEIGHT, 0);
     const visibleStart = Math.max(startMins, W_START * 60);
@@ -461,7 +473,7 @@ function WeekView({
 
               {/* Events */}
               {dayEvts.filter((e) => !isAllDayEvent(e)).map((evt) => {
-                const pos = getEventPos(evt);
+                const pos = getEventPos(evt, date);
                 if (!pos) return null;
                 const member = members.find((m) => evt.assignee_ids.includes(m.id));
                 const color = evt.color || member?.color || "#6366F1";
@@ -575,12 +587,16 @@ function DayView({
   const nowTop = (nowMins - startHour * 60) / 60 * W_HOUR_HEIGHT;
   const showNowLine = isViewingToday && nowMins >= startHour * 60 && nowMins < endHour * 60;
 
+  const viewDayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+  const viewDayEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() + 1);
+
   const getEventPos = (event: CalendarEvent): { top: number; height: number } | null => {
     const start = new Date(event.start_time);
     const end = new Date(event.end_time);
-    const sMins = start.getHours() * 60 + start.getMinutes();
-    const eMins = end.getHours() * 60 + end.getMinutes();
-    if (sMins >= endHour * 60 || eMins <= startHour * 60) return null;
+    if (start >= viewDayEnd || end <= viewDayStart) return null;
+    const sMins = start < viewDayStart ? 0 : start.getHours() * 60 + start.getMinutes();
+    const eMins = end >= viewDayEnd ? endHour * 60 : end.getHours() * 60 + end.getMinutes();
+    if (sMins >= endHour * 60) return null;
     const top = Math.max((sMins - startHour * 60) / 60 * W_HOUR_HEIGHT, 0);
     const visStart = Math.max(sMins, startHour * 60);
     const visEnd = Math.min(Math.max(eMins, sMins + 30), endHour * 60);
@@ -609,6 +625,31 @@ function DayView({
           </div>
         ))}
       </div>
+
+      {/* All-day events banner */}
+      {(() => {
+        const allDay = events.filter(isAllDayEvent);
+        if (allDay.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-gray-100 bg-gray-50/60">
+            <span className="text-[10px] text-gray-400 font-medium self-center mr-1">all-day</span>
+            {allDay.map((evt) => {
+              const member = members.find((m) => evt.assignee_ids.includes(m.id));
+              const color = evt.color || member?.color || "#6366F1";
+              return (
+                <div
+                  key={evt.id}
+                  className="text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-xs"
+                  style={{ backgroundColor: color, color: getMemberTextColor(color) }}
+                  title={evt.title}
+                >
+                  {evt.source === "ical" && "🔗 "}{evt.source === "family-ical" && "👨‍👩‍👧‍👦 "}{evt.title}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* Show earlier CTA */}
       {startHour > 0 && atTop && (
@@ -656,7 +697,7 @@ function DayView({
                   </div>
                 )}
                 {/* Events */}
-                {colEvents.map((evt) => {
+                {colEvents.filter((e) => !isAllDayEvent(e)).map((evt) => {
                   const pos = getEventPos(evt);
                   if (!pos) return null;
                   const isLocal = evt.source === "local" || !evt.source;
@@ -763,8 +804,14 @@ function MonthView({
             {week.map((day, di) => {
               const inMonth = isSameMonth(day, selectedDate);
               const today = isSameDay(day, now);
+              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+              const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
               const dayEvts = events
-                .filter((e) => isSameDay(new Date(e.start_time), day))
+                .filter((e) => {
+                  const s = new Date(e.start_time);
+                  const en = new Date(e.end_time);
+                  return s < dayEnd && en > dayStart;
+                })
                 .slice(0, MAX_EVENTS_PER_DAY + 1); // +1 so we know if there's overflow
               const shown = dayEvts.slice(0, MAX_EVENTS_PER_DAY);
               const overflow = dayEvts.length - MAX_EVENTS_PER_DAY;
