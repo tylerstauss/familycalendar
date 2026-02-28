@@ -27,12 +27,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Provide ?date= or ?start=&end=" }, { status: 400 });
   }
 
-  const members = (await sql`
+  // All visible members — used for iCal fetching AND for name-matching in family calendars
+  const allMembers = (await sql`
     SELECT * FROM family_members
     WHERE family_id = ${familyId}
-      AND ical_url IS NOT NULL AND ical_url != ''
       AND (hidden = 0 OR hidden IS NULL)
   `) as FamilyMember[];
+
+  const icalMembers = allMembers.filter((m) => m.ical_url);
 
   const familyCalendars = (await sql`
     SELECT * FROM family_calendars
@@ -41,13 +43,13 @@ export async function GET(req: NextRequest) {
       AND (hidden = 0 OR hidden IS NULL)
   `) as FamilyCalendar[];
 
-  if (members.length === 0 && familyCalendars.length === 0) {
+  if (icalMembers.length === 0 && familyCalendars.length === 0) {
     return NextResponse.json([]);
   }
 
   const results = await Promise.allSettled([
-    ...members.map((m) => getIcalEvents(m.id, m.ical_url!, rangeStart, rangeEnd)),
-    ...familyCalendars.map((c) => getFamilyCalendarEvents(c.id, c.color, c.ical_url, rangeStart, rangeEnd)),
+    ...icalMembers.map((m) => getIcalEvents(m.id, m.ical_url!, rangeStart, rangeEnd)),
+    ...familyCalendars.map((c) => getFamilyCalendarEvents(c.id, c.color, c.ical_url, rangeStart, rangeEnd, allMembers)),
   ]);
 
   const allEvents: CalendarEvent[] = [];

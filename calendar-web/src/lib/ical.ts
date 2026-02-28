@@ -455,12 +455,26 @@ function expandEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date): 
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+// Match family member names found in an event title (case-insensitive, whole-word).
+// Returns the IDs of all matching members, or [] if none match (meaning "all").
+function assigneesFromTitle(title: string, members: Array<{ id: string; name: string }>): string[] {
+  const matched: string[] = [];
+  for (const member of members) {
+    const escaped = member.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(title)) {
+      matched.push(member.id);
+    }
+  }
+  return matched; // empty = show for everyone
+}
+
 export async function getFamilyCalendarEvents(
   calendarId: string,
   color: string,
   icalUrl: string,
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  members: Array<{ id: string; name: string }> = [],
 ): Promise<CalendarEvent[]> {
   const text = await fetchIcalText(icalUrl);
   return expandEvents(parseIcalEvents(text), rangeStart, rangeEnd).map((evt) => ({
@@ -470,7 +484,7 @@ export async function getFamilyCalendarEvents(
     end_time: evt.dtend.toISOString(),
     location: evt.location,
     notes: evt.description,
-    assignee_ids: [],
+    assignee_ids: assigneesFromTitle(evt.summary, members),
     source: "family-ical" as const,
     color,
   }));
