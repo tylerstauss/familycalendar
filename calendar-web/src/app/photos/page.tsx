@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Photo } from "@/lib/types";
 
 export default function PhotosPage() {
+  const router = useRouter();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [index, setIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -48,16 +50,17 @@ export default function PhotosPage() {
     [photos.length]
   );
 
-  // Keyboard arrow keys
+  // Keyboard navigation
   useEffect(() => {
-    if (photos.length <= 1) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") router.push("/");
+      if (photos.length <= 1) return;
       if (e.key === "ArrowLeft") navigate(-1);
       if (e.key === "ArrowRight") navigate(1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [photos.length, navigate]);
+  }, [photos.length, navigate, router]);
 
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -112,6 +115,17 @@ export default function PhotosPage() {
           height: "100%",
         }}
       />
+
+      {/* Close button */}
+      <Link
+        href="/"
+        aria-label="Exit photo view"
+        className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-black/40 text-white opacity-40 hover:opacity-100 transition-opacity"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </Link>
 
       {/* Arrow buttons — only shown when there are multiple photos */}
       {photos.length > 1 && (
