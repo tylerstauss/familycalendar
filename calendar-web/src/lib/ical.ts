@@ -22,7 +22,30 @@ function unfold(text: string): string {
   return text.replace(/\r\n[ \t]/g, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
-// Parse an iCal date/datetime string
+// Convert a naive local datetime (yr/mo/dy/hr/mn/sc) in a named IANA timezone to a UTC Date.
+// Uses Intl.DateTimeFormat to determine the UTC offset for that timezone at that moment.
+function localTzToUTC(yr: number, mo: number, dy: number, hr: number, mn: number, sc: number, tzid: string): Date {
+  // Start with a UTC guess (treat the local time as if it were UTC)
+  const utcGuess = new Date(Date.UTC(yr, mo, dy, hr, mn, sc));
+
+  // Find out what "wall clock" time that UTC instant represents in the target timezone
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tzid,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).formatToParts(utcGuess);
+
+  const get = (type: string) => +(parts.find((p) => p.type === type)?.value ?? "0");
+  // hour12:false can return "24" for midnight
+  const tzHr = get("hour") % 24;
+  const displayedAsUTC = Date.UTC(get("year"), get("month") - 1, get("day"), tzHr, get("minute"), get("second"));
+
+  // The offset is how far our guess drifted from the desired local time
+  const offset = utcGuess.getTime() - displayedAsUTC;
+  return new Date(utcGuess.getTime() + offset);
+}
+
+// Parse an iCal date/datetime string, respecting TZID when present
 function parseIcalDate(value: string, tzid?: string): Date | null {
   if (!value) return null;
 
@@ -37,11 +60,22 @@ function parseIcalDate(value: string, tzid?: string): Date | null {
   if (!match) return null;
 
   const [, yr, mo, dy, hr, mn, sc, z] = match;
+
   if (z === "Z") {
     return new Date(Date.UTC(+yr, +mo - 1, +dy, +hr, +mn, +sc));
   }
-  // Local time (we treat as local)
-  return new Date(+yr, +mo - 1, +dy, +hr, +mn, +sc);
+
+  // Timezone-aware local time (TZID present) — convert properly
+  if (tzid) {
+    try {
+      return localTzToUTC(+yr, +mo - 1, +dy, +hr, +mn, +sc, tzid);
+    } catch {
+      // Unknown TZID — fall through to UTC treatment
+    }
+  }
+
+  // Floating time (no TZID, no Z) — treat as UTC (server runs in UTC)
+  return new Date(Date.UTC(+yr, +mo - 1, +dy, +hr, +mn, +sc));
 }
 
 interface ParsedEvent {
@@ -104,6 +138,10 @@ function parseIcalEvents(text: string): ParsedEvent[] {
     const value = trimmed.slice(colonIdx + 1);
     const propName = propPart.split(";")[0].toUpperCase();
 
+    // Extract TZID param (e.g. DTSTART;TZID=America/New_York:...)
+    const tzidMatch = propPart.match(/TZID=([^;:]+)/i);
+    const tzid = tzidMatch?.[1];
+
     switch (propName) {
       case "UID":
         uid = value;
@@ -112,10 +150,10 @@ function parseIcalEvents(text: string): ParsedEvent[] {
         summary = unescapeIcal(value);
         break;
       case "DTSTART":
-        dtstart = parseIcalDate(value);
+        dtstart = parseIcalDate(value, tzid);
         break;
       case "DTEND":
-        dtend = parseIcalDate(value);
+        dtend = parseIcalDate(value, tzid);
         break;
       case "LOCATION":
         location = unescapeIcal(value);
