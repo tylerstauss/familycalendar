@@ -8,9 +8,8 @@ export interface SessionPayload {
   name: string;
 }
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "dev-secret-change-in-production"
-);
+if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET env var is not set");
+const SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 const COOKIE = "session";
 const EXPIRES = 30 * 24 * 60 * 60; // 30 days in seconds
 
