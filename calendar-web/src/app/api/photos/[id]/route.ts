@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { getPhotoStream } from "@/lib/photos";
 
 export async function GET(
   req: NextRequest,
@@ -18,5 +19,11 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.redirect(photo.url);
+  const { stream, contentType } = await getPhotoStream(photo.url);
+  return new NextResponse(stream, {
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "private, max-age=3600",
+    },
+  });
 }
