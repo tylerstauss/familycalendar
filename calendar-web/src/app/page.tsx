@@ -303,8 +303,8 @@ function isAllDayEvent(evt: CalendarEvent): boolean {
   const s = new Date(evt.start_time);
   const e = new Date(evt.end_time);
   return (
-    s.getHours() === 0 && s.getMinutes() === 0 && s.getSeconds() === 0 &&
-    e.getHours() === 0 && e.getMinutes() === 0 && e.getSeconds() === 0 &&
+    s.getUTCHours() === 0 && s.getUTCMinutes() === 0 && s.getUTCSeconds() === 0 &&
+    e.getUTCHours() === 0 && e.getUTCMinutes() === 0 && e.getUTCSeconds() === 0 &&
     e.getTime() - s.getTime() >= 86400000
   );
 }
