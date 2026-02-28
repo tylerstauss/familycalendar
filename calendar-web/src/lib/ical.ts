@@ -94,7 +94,6 @@ function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 }
 
-// Returns the date of the Nth (or -Nth from end) occurrence of a weekday in a month
 function getNthWeekdayOfMonth(year: number, month: number, weekday: number, n: number): Date | null {
   if (n > 0) {
     const first = new Date(Date.UTC(year, month, 1));
@@ -107,6 +106,43 @@ function getNthWeekdayOfMonth(year: number, month: number, weekday: number, n: n
   }
 }
 
+// Local date/time components of a UTC Date in a given timezone.
+// All date arithmetic is performed on "nominal UTC dates" where getUTC*()
+// returns the LOCAL year/month/day/hour/etc., which lets us do correct
+// day-of-week and calendar math in local time.
+interface LocalComponents {
+  y: number; mo: number; d: number;
+  h: number; m: number; s: number;
+  dow: number; // local day of week (0=Sun)
+}
+
+function getLocalComponents(dt: Date, tzid?: string): LocalComponents {
+  if (tzid) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tzid,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    }).formatToParts(dt);
+    const get = (t: string) => +(parts.find(p => p.type === t)?.value ?? "0");
+    const y = get("year"), mo = get("month") - 1, d = get("day");
+    const h = get("hour") % 24, m = get("minute"), s = get("second");
+    return { y, mo, d, h, m, s, dow: new Date(Date.UTC(y, mo, d)).getUTCDay() };
+  }
+  return {
+    y: dt.getUTCFullYear(), mo: dt.getUTCMonth(), d: dt.getUTCDate(),
+    h: dt.getUTCHours(), m: dt.getUTCMinutes(), s: dt.getUTCSeconds(),
+    dow: dt.getUTCDay(),
+  };
+}
+
+// Convert a LOCAL (y, mo, d) date + local time to a UTC Date, DST-aware
+function localToUTC(y: number, mo: number, d: number, h: number, m: number, s: number, tzid?: string): Date {
+  if (tzid) {
+    try { return localTzToUTC(y, mo, d, h, m, s, tzid); } catch { /* fall through */ }
+  }
+  return new Date(Date.UTC(y, mo, d, h, m, s));
+}
+
 function expandRRule(
   rrule: RRule,
   dtstart: Date,
@@ -114,6 +150,8 @@ function expandRRule(
   rangeStart: Date,
   rangeEnd: Date,
   exdateMs: Set<number>,
+  ls: LocalComponents, // local components of dtstart
+  tzid?: string,
 ): Array<{ start: Date; end: Date }> {
   const results: Array<{ start: Date; end: Date }> = [];
   let occurrenceCount = 0;
@@ -121,151 +159,152 @@ function expandRRule(
   const MAX_ITER = 2000;
   let iter = 0;
 
-  // Time-of-day in ms from UTC midnight (preserved on each occurrence)
-  const dtMidnight = Date.UTC(dtstart.getUTCFullYear(), dtstart.getUTCMonth(), dtstart.getUTCDate());
-  const timeOfDay = dtstart.getTime() - dtMidnight;
+  // Local components of rangeStart — used for fast-forward arithmetic
+  const lrs = getLocalComponents(rangeStart, tzid);
+  // "Nominal UTC" = a Date whose getUTC*() gives LOCAL y/mo/d (for calendar arithmetic)
+  const lrsNominal = new Date(Date.UTC(lrs.y, lrs.mo, lrs.d));
 
-  // Returns true to continue, false to stop
-  function consider(start: Date): boolean {
-    if (rrule.until && start > rrule.until) return false;
-    if (start < dtstart) return true; // fast-forward overshoot — skip, don't count
-    if (exdateMs.has(start.getTime())) {
+  // Returns true to continue iterating, false to stop
+  function consider(utcStart: Date): boolean {
+    if (rrule.until && utcStart > rrule.until) return false;
+    if (utcStart < dtstart) return true; // fast-forward overshoot — skip, don't count
+    if (exdateMs.has(utcStart.getTime())) {
       occurrenceCount++;
       return rrule.count === undefined || occurrenceCount < rrule.count;
     }
     occurrenceCount++;
     if (rrule.count !== undefined && occurrenceCount > rrule.count) return false;
-    const end = new Date(start.getTime() + duration);
-    if (start < rangeEnd && end > rangeStart) {
-      results.push({ start, end });
+    const utcEnd = new Date(utcStart.getTime() + duration);
+    if (utcStart < rangeEnd && utcEnd > rangeStart) {
+      results.push({ start: utcStart, end: utcEnd });
       if (results.length >= MAX_RESULTS) return false;
     }
+    // Past the window with no COUNT — no more useful results
+    if (utcStart >= rangeEnd && rrule.count === undefined) return false;
     return true;
   }
 
+  // Nominal UTC of dtstart's local date (for arithmetic)
+  const lsNominal = new Date(Date.UTC(ls.y, ls.mo, ls.d));
+
   // ── DAILY ────────────────────────────────────────────────────────────────
   if (rrule.freq === "DAILY") {
-    let cur = new Date(dtstart);
-    if (!rrule.count && rangeStart > dtstart) {
-      const skip = Math.max(0, Math.floor((rangeStart.getTime() - dtstart.getTime()) / (rrule.interval * MS_DAY)) - 1);
-      cur = new Date(dtstart.getTime() + skip * rrule.interval * MS_DAY);
+    let cur = new Date(lsNominal);
+    if (!rrule.count && lrsNominal > cur) {
+      const skip = Math.max(0, Math.floor((lrsNominal.getTime() - cur.getTime()) / (rrule.interval * MS_DAY)) - 1);
+      cur = new Date(cur.getTime() + skip * rrule.interval * MS_DAY);
     }
-    while (iter++ < MAX_ITER && cur < rangeEnd) {
-      if (!consider(new Date(cur))) break;
+    while (iter++ < MAX_ITER) {
+      const utcStart = localToUTC(cur.getUTCFullYear(), cur.getUTCMonth(), cur.getUTCDate(), ls.h, ls.m, ls.s, tzid);
+      if (!consider(utcStart)) break;
       cur = new Date(cur.getTime() + rrule.interval * MS_DAY);
     }
 
   // ── WEEKLY ───────────────────────────────────────────────────────────────
   } else if (rrule.freq === "WEEKLY") {
-    // Compute UTC midnight of the Sunday of dtstart's week
-    const dtSunday = new Date(Date.UTC(dtstart.getUTCFullYear(), dtstart.getUTCMonth(), dtstart.getUTCDate()) - dtstart.getUTCDay() * MS_DAY);
+    // Nominal UTC Sunday of dtstart's LOCAL week
+    let localSunday = new Date(lsNominal.getTime() - ls.dow * MS_DAY);
 
-    let weekStart = new Date(dtSunday);
-    if (!rrule.count && rangeStart > dtstart) {
-      const skip = Math.max(0, Math.floor((rangeStart.getTime() - dtSunday.getTime()) / (rrule.interval * 7 * MS_DAY)) - 1);
-      weekStart = new Date(dtSunday.getTime() + skip * rrule.interval * 7 * MS_DAY);
+    if (!rrule.count && lrsNominal > lsNominal) {
+      const skip = Math.max(0, Math.floor((lrsNominal.getTime() - localSunday.getTime()) / (rrule.interval * 7 * MS_DAY)) - 1);
+      localSunday = new Date(localSunday.getTime() + skip * rrule.interval * 7 * MS_DAY);
     }
 
-    // Days to generate: explicit BYDAY, or same weekday as dtstart
+    // Days to generate: explicit BYDAY list, or same local weekday as dtstart
     const targetDays = rrule.byday.length > 0
       ? [...rrule.byday.map(b => b.day)].sort((a, b) => a - b)
-      : [dtstart.getUTCDay()];
+      : [ls.dow];
 
-    while (iter++ < MAX_ITER && weekStart < rangeEnd) {
+    while (iter++ < MAX_ITER) {
       let cont = true;
       for (const day of targetDays) {
-        const occurrence = new Date(weekStart.getTime() + day * MS_DAY + timeOfDay);
-        if (occurrence >= rangeEnd) { cont = false; break; }
-        if (!consider(occurrence)) { cont = false; break; }
+        // localDay is the LOCAL date (as nominal UTC) for this weekday in this week
+        const localDay = new Date(localSunday.getTime() + day * MS_DAY);
+        const utcStart = localToUTC(localDay.getUTCFullYear(), localDay.getUTCMonth(), localDay.getUTCDate(), ls.h, ls.m, ls.s, tzid);
+        if (!consider(utcStart)) { cont = false; break; }
       }
       if (!cont) break;
-      weekStart = new Date(weekStart.getTime() + rrule.interval * 7 * MS_DAY);
+      localSunday = new Date(localSunday.getTime() + rrule.interval * 7 * MS_DAY);
     }
 
   // ── MONTHLY ──────────────────────────────────────────────────────────────
   } else if (rrule.freq === "MONTHLY") {
-    let curYear = dtstart.getUTCFullYear();
-    let curMonth = dtstart.getUTCMonth();
-    if (!rrule.count && rangeStart > dtstart) {
-      const totalMonths = (rangeStart.getUTCFullYear() - curYear) * 12 + (rangeStart.getUTCMonth() - curMonth);
+    let curY = ls.y, curMo = ls.mo;
+    if (!rrule.count && (lrs.y > curY || (lrs.y === curY && lrs.mo > curMo))) {
+      const totalMonths = (lrs.y - curY) * 12 + (lrs.mo - curMo);
       const skip = Math.max(0, Math.floor(totalMonths / rrule.interval - 1) * rrule.interval);
-      curMonth += skip;
-      curYear += Math.floor(curMonth / 12);
-      curMonth = ((curMonth % 12) + 12) % 12;
+      curMo += skip;
+      curY += Math.floor(curMo / 12);
+      curMo = ((curMo % 12) + 12) % 12;
     }
 
     while (iter++ < MAX_ITER) {
-      if (new Date(Date.UTC(curYear, curMonth, 1)) >= rangeEnd) break;
-
+      // Candidates are nominal UTC dates for LOCAL dates in this month
       const candidates: Date[] = [];
 
       if (rrule.byday.length > 0) {
         for (const { n, day } of rrule.byday) {
           if (n !== undefined) {
-            // e.g. 2MO = second Monday, -1FR = last Friday
-            const d = getNthWeekdayOfMonth(curYear, curMonth, day, n);
-            if (d) candidates.push(new Date(d.getTime() + timeOfDay));
+            const d = getNthWeekdayOfMonth(curY, curMo, day, n);
+            if (d) candidates.push(d);
           } else {
-            // All occurrences of that weekday in the month
-            const first = new Date(Date.UTC(curYear, curMonth, 1));
+            const first = new Date(Date.UTC(curY, curMo, 1));
             const diff = (day - first.getUTCDay() + 7) % 7;
-            for (let dn = 1 + diff; dn <= daysInMonth(curYear, curMonth); dn += 7) {
-              candidates.push(new Date(Date.UTC(curYear, curMonth, dn) + timeOfDay));
+            for (let dn = 1 + diff; dn <= daysInMonth(curY, curMo); dn += 7) {
+              candidates.push(new Date(Date.UTC(curY, curMo, dn)));
             }
           }
         }
       } else if (rrule.bymonthday.length > 0) {
         for (const dayNum of rrule.bymonthday) {
-          const actual = dayNum > 0 ? dayNum : daysInMonth(curYear, curMonth) + dayNum + 1;
-          if (actual >= 1 && actual <= daysInMonth(curYear, curMonth)) {
-            candidates.push(new Date(Date.UTC(curYear, curMonth, actual) + timeOfDay));
+          const actual = dayNum > 0 ? dayNum : daysInMonth(curY, curMo) + dayNum + 1;
+          if (actual >= 1 && actual <= daysInMonth(curY, curMo)) {
+            candidates.push(new Date(Date.UTC(curY, curMo, actual)));
           }
         }
       } else {
-        // Same day of month as dtstart (capped to month length)
-        const dn = Math.min(dtstart.getUTCDate(), daysInMonth(curYear, curMonth));
-        candidates.push(new Date(Date.UTC(curYear, curMonth, dn) + timeOfDay));
+        // Same local day-of-month as dtstart
+        const dn = Math.min(ls.d, daysInMonth(curY, curMo));
+        candidates.push(new Date(Date.UTC(curY, curMo, dn)));
       }
 
       candidates.sort((a, b) => a.getTime() - b.getTime());
       let cont = true;
-      for (const c of candidates) {
-        if (!consider(c)) { cont = false; break; }
+      for (const localDay of candidates) {
+        const utcStart = localToUTC(localDay.getUTCFullYear(), localDay.getUTCMonth(), localDay.getUTCDate(), ls.h, ls.m, ls.s, tzid);
+        if (!consider(utcStart)) { cont = false; break; }
       }
       if (!cont) break;
 
-      curMonth += rrule.interval;
-      curYear += Math.floor(curMonth / 12);
-      curMonth = ((curMonth % 12) + 12) % 12;
+      curMo += rrule.interval;
+      curY += Math.floor(curMo / 12);
+      curMo = ((curMo % 12) + 12) % 12;
     }
 
   // ── YEARLY ───────────────────────────────────────────────────────────────
   } else if (rrule.freq === "YEARLY") {
-    let curYear = dtstart.getUTCFullYear();
-    if (!rrule.count && rangeStart > dtstart) {
-      const skip = Math.max(0, Math.floor((rangeStart.getUTCFullYear() - curYear) / rrule.interval - 1) * rrule.interval);
-      curYear += skip;
+    let curY = ls.y;
+    if (!rrule.count && lrs.y > curY) {
+      const skip = Math.max(0, Math.floor((lrs.y - curY) / rrule.interval - 1) * rrule.interval);
+      curY += skip;
     }
 
     while (iter++ < MAX_ITER) {
-      if (curYear > rangeEnd.getUTCFullYear() + 1) break;
-
-      let occurrence: Date;
+      let localDay: Date | null;
       if (rrule.bymonth.length > 0 && rrule.byday.length > 0 && rrule.byday[0].n !== undefined) {
-        // e.g. BYMONTH=3;BYDAY=2SU — second Sunday of March
-        const d = getNthWeekdayOfMonth(curYear, rrule.bymonth[0] - 1, rrule.byday[0].day, rrule.byday[0].n!);
-        if (!d) { curYear += rrule.interval; continue; }
-        occurrence = new Date(d.getTime() + timeOfDay);
+        localDay = getNthWeekdayOfMonth(curY, rrule.bymonth[0] - 1, rrule.byday[0].day, rrule.byday[0].n!);
       } else if (rrule.bymonth.length > 0) {
-        const month = rrule.bymonth[0] - 1;
-        const dn = rrule.bymonthday.length > 0 ? rrule.bymonthday[0] : dtstart.getUTCDate();
-        occurrence = new Date(Date.UTC(curYear, month, dn) + timeOfDay);
+        const dn = rrule.bymonthday.length > 0 ? rrule.bymonthday[0] : ls.d;
+        localDay = new Date(Date.UTC(curY, rrule.bymonth[0] - 1, dn));
       } else {
-        occurrence = new Date(Date.UTC(curYear, dtstart.getUTCMonth(), dtstart.getUTCDate()) + timeOfDay);
+        localDay = new Date(Date.UTC(curY, ls.mo, ls.d));
       }
 
-      if (!consider(occurrence)) break;
-      curYear += rrule.interval;
+      if (localDay) {
+        const utcStart = localToUTC(localDay.getUTCFullYear(), localDay.getUTCMonth(), localDay.getUTCDate(), ls.h, ls.m, ls.s, tzid);
+        if (!consider(utcStart)) break;
+      }
+      curY += rrule.interval;
     }
   }
 
@@ -279,6 +318,7 @@ interface RawEvent {
   summary: string;
   dtstart: Date;
   dtend: Date;
+  dtStartTzid?: string; // TZID of DTSTART — needed for DST-aware recurrence expansion
   location: string;
   description: string;
   rrule?: string;
@@ -292,7 +332,8 @@ function parseIcalEvents(text: string): RawEvent[] {
 
   let inEvent = false;
   let uid = "", summary = "", location = "", description = "", rrule: string | undefined;
-  let dtstart: Date | null = null, dtend: Date | null = null, recurrenceId: Date | undefined;
+  let dtstart: Date | null = null, dtend: Date | null = null;
+  let dtStartTzid: string | undefined, recurrenceId: Date | undefined;
   let exdates: Date[] = [];
 
   for (const line of lines) {
@@ -301,7 +342,7 @@ function parseIcalEvents(text: string): RawEvent[] {
     if (trimmed === "BEGIN:VEVENT") {
       inEvent = true;
       uid = ""; summary = ""; location = ""; description = ""; rrule = undefined;
-      dtstart = null; dtend = null; recurrenceId = undefined; exdates = [];
+      dtstart = null; dtend = null; dtStartTzid = undefined; recurrenceId = undefined; exdates = [];
       continue;
     }
 
@@ -310,7 +351,7 @@ function parseIcalEvents(text: string): RawEvent[] {
         events.push({
           uid, summary: summary || "Untitled", dtstart,
           dtend: dtend || new Date(dtstart.getTime() + 3_600_000),
-          location, description, rrule, exdates, recurrenceId,
+          dtStartTzid, location, description, rrule, exdates, recurrenceId,
         });
       }
       inEvent = false;
@@ -333,7 +374,10 @@ function parseIcalEvents(text: string): RawEvent[] {
       case "LOCATION":     location = unescapeIcal(value); break;
       case "DESCRIPTION":  description = unescapeIcal(value); break;
       case "RRULE":        rrule = value; break;
-      case "DTSTART":      dtstart = parseIcalDate(value, tzid); break;
+      case "DTSTART":
+        dtstart = parseIcalDate(value, tzid);
+        dtStartTzid = tzid;
+        break;
       case "DTEND":        dtend = parseIcalDate(value, tzid); break;
       case "RECURRENCE-ID": recurrenceId = parseIcalDate(value, tzid) ?? undefined; break;
       case "EXDATE":
@@ -359,7 +403,7 @@ interface ParsedEvent {
 }
 
 function expandEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date): ParsedEvent[] {
-  // Group events by UID: one master (no RECURRENCE-ID) + N exceptions
+  // Group by UID: one master (no RECURRENCE-ID) + modified exceptions
   const byUid = new Map<string, { master?: RawEvent; exceptions: Map<number, RawEvent> }>();
   for (const evt of rawEvents) {
     if (!byUid.has(evt.uid)) byUid.set(evt.uid, { exceptions: new Map() });
@@ -379,7 +423,6 @@ function expandEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date): 
     const exdateMs = new Set(master.exdates.map(d => d.getTime()));
 
     if (!master.rrule) {
-      // Non-recurring event
       if (master.dtstart < rangeEnd && master.dtend > rangeStart) {
         results.push({ uid: master.uid, summary: master.summary, dtstart: master.dtstart, dtend: master.dtend, location: master.location, description: master.description });
       }
@@ -388,15 +431,16 @@ function expandEvents(rawEvents: RawEvent[], rangeStart: Date, rangeEnd: Date): 
 
     const rrule = parseRRule(master.rrule);
     if (!rrule) {
-      // Unparseable RRULE — fall back to first occurrence only
       if (master.dtstart < rangeEnd && master.dtend > rangeStart) {
         results.push({ uid: master.uid, summary: master.summary, dtstart: master.dtstart, dtend: master.dtend, location: master.location, description: master.description });
       }
       continue;
     }
 
-    for (const { start, end } of expandRRule(rrule, master.dtstart, duration, rangeStart, rangeEnd, exdateMs)) {
-      // If this occurrence was individually modified, use the exception's data
+    // Get local components of dtstart in the event's timezone for DST-aware expansion
+    const localStart = getLocalComponents(master.dtstart, master.dtStartTzid);
+
+    for (const { start, end } of expandRRule(rrule, master.dtstart, duration, rangeStart, rangeEnd, exdateMs, localStart, master.dtStartTzid)) {
       const ex = exceptions.get(start.getTime());
       if (ex) {
         results.push({ uid: master.uid, summary: ex.summary, dtstart: ex.dtstart, dtend: ex.dtend, location: ex.location, description: ex.description });
