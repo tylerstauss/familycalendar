@@ -16,6 +16,7 @@ export default function CalendarPage() {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [mealDetailEvent, setMealDetailEvent] = useState<CalendarEvent | null>(null);
+  const [eventDetailEvent, setEventDetailEvent] = useState<CalendarEvent | null>(null);
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("day");
   const [now, setNow] = useState(new Date());
 
@@ -260,6 +261,7 @@ export default function CalendarPage() {
             onEdit={setEditingEvent}
             onDelete={handleDeleteEvent}
             onMealClick={setMealDetailEvent}
+            onEventClick={setEventDetailEvent}
             now={now}
             selectedDate={selectedDate}
           />
@@ -269,6 +271,8 @@ export default function CalendarPage() {
             events={events}
             members={members}
             onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
+            onEventClick={setEventDetailEvent}
+            onMealClick={setMealDetailEvent}
             now={now}
           />
         ) : (
@@ -277,6 +281,8 @@ export default function CalendarPage() {
             events={events}
             members={members}
             onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
+            onEventClick={setEventDetailEvent}
+            onMealClick={setMealDetailEvent}
             now={now}
           />
         )}
@@ -316,6 +322,13 @@ export default function CalendarPage() {
           event={mealDetailEvent}
           members={members}
           onClose={() => setMealDetailEvent(null)}
+        />
+      )}
+      {eventDetailEvent && (
+        <EventDetailModal
+          event={eventDetailEvent}
+          members={members}
+          onClose={() => setEventDetailEvent(null)}
         />
       )}
     </div>
@@ -388,6 +401,95 @@ function MealDetailModal({
   );
 }
 
+// ── Event Detail Modal ──────────────────────────────────────────
+
+function EventDetailModal({
+  event,
+  members,
+  onClose,
+}: {
+  event: CalendarEvent;
+  members: FamilyMember[];
+  onClose: () => void;
+}) {
+  const assignedMembers = members.filter((m) => event.assignee_ids.includes(m.id));
+  const allDay = isAllDayEvent(event);
+  const start = new Date(event.start_time);
+  const end = new Date(event.end_time);
+  const notes = event.notes
+    ?.split("-::~:~::")[0]
+    .replace(/\s*Learn more about Meet at:.*$/m, "")
+    .trim();
+
+  const sourceLabel =
+    event.source === "ical" ? "Personal Calendar" :
+    event.source === "family-ical" ? "Family Calendar" :
+    "Calendar";
+
+  const timeLabel = allDay
+    ? format(start, "EEEE, MMM d")
+    : `${format(start, "EEEE, MMM d")} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-gray-400 uppercase font-medium mb-0.5">{sourceLabel}</p>
+            <p className="text-xs text-gray-400 mb-1.5">{timeLabel}</p>
+            <h2 className="text-lg font-semibold text-gray-900">{event.title}</h2>
+            {assignedMembers.length > 0 && (
+              <div className="flex gap-1 mt-1.5 flex-wrap">
+                {assignedMembers.map((m) => (
+                  <span
+                    key={m.id}
+                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: m.color, color: "#374151" }}
+                  >
+                    {m.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 -mr-1 -mt-1 rounded-lg shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {(event.location || notes) ? (
+          <div className="p-5 space-y-3.5">
+            {event.location && (
+              <div className="flex items-start gap-2.5">
+                <svg className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <p className="text-sm text-gray-700">{event.location}</p>
+              </div>
+            )}
+            {notes && (
+              <div className="flex items-start gap-2.5">
+                <svg className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{notes}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-5 text-sm text-gray-400">No additional details for this event.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Week Time Grid ──────────────────────────────────────────────
 
 const W_HOUR_HEIGHT = 64; // px per hour
@@ -411,12 +513,16 @@ function WeekView({
   events,
   members,
   onDayClick,
+  onEventClick,
+  onMealClick,
   now,
 }: {
   weekDays: { date: Date; events: CalendarEvent[] }[];
   events: CalendarEvent[];
   members: FamilyMember[];
   onDayClick: (date: Date) => void;
+  onEventClick: (e: CalendarEvent) => void;
+  onMealClick: (e: CalendarEvent) => void;
   now: Date;
 }) {
   const hourLabels = Array.from({ length: W_HOURS + 1 }, (_, i) => W_START + i);
@@ -512,7 +618,7 @@ function WeekView({
               return (
                 <div
                   key={evt.id}
-                  className="absolute rounded-md px-1.5 overflow-hidden"
+                  className="absolute rounded-md px-1.5 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
                   style={{
                     left: `calc(${(startCol / 7) * 100}% + 2px)`,
                     width: `calc(${(spanCols / 7) * 100}% - 4px)`,
@@ -521,6 +627,7 @@ function WeekView({
                     backgroundColor: color,
                   }}
                   title={evt.title}
+                  onClick={() => onEventClick(evt)}
                 >
                   <p className="text-[11px] font-semibold leading-none truncate flex items-center h-full" style={{ color: getMemberTextColor(color) }}>
                     {evt.title}
@@ -583,6 +690,7 @@ function WeekView({
                     className="absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity z-10"
                     style={{ top: pos.top, height: pos.height, backgroundColor: color }}
                     title={`${evt.title} — ${format(new Date(evt.start_time), "h:mm a")}`}
+                    onClick={isMeal ? () => onMealClick(evt) : () => onEventClick(evt)}
                   >
                     <p className="text-[11px] font-semibold leading-tight truncate" style={{ color: getMemberTextColor(color) }}>
                       {isIcal && "🔗 "}{isFamilyCal && "👨‍👩‍👧‍👦 "}{isMeal && "🍽 "}{evt.title}
@@ -617,6 +725,7 @@ function DayView({
   members,
   onEdit,
   onMealClick,
+  onEventClick,
   now,
   selectedDate,
 }: {
@@ -625,6 +734,7 @@ function DayView({
   onEdit: (e: CalendarEvent) => void;
   onDelete: (id: string) => void;
   onMealClick: (e: CalendarEvent) => void;
+  onEventClick: (e: CalendarEvent) => void;
   now: Date;
   selectedDate: Date;
 }) {
@@ -735,12 +845,14 @@ function DayView({
             {allDay.map((evt) => {
               const member = members.find((m) => evt.assignee_ids.includes(m.id));
               const color = evt.color || member?.color || "#6366F1";
+              const isLocal = evt.source === "local" || !evt.source;
               return (
                 <div
                   key={evt.id}
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-xs"
+                  className="text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-xs cursor-pointer hover:opacity-80 transition-opacity"
                   style={{ backgroundColor: color, color: getMemberTextColor(color) }}
                   title={evt.title}
+                  onClick={isLocal ? () => onEdit(evt) : () => onEventClick(evt)}
                 >
                   {evt.source === "ical" && "🔗 "}{evt.source === "family-ical" && "👨‍👩‍👧‍👦 "}{evt.title}
                 </div>
@@ -805,9 +917,9 @@ function DayView({
                   const textColor = getMemberTextColor(color);
                   return (
                     <div key={evt.id}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 transition-opacity ${isLocal || isMealEvt ? "cursor-pointer hover:opacity-80" : ""}`}
+                      className="absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 transition-opacity cursor-pointer hover:opacity-80"
                       style={{ top: pos.top, height: pos.height, backgroundColor: color }}
-                      onClick={isMealEvt ? () => onMealClick(evt) : isLocal ? () => onEdit(evt) : undefined}
+                      onClick={isMealEvt ? () => onMealClick(evt) : isLocal ? () => onEdit(evt) : () => onEventClick(evt)}
                       title={`${evt.title} — ${format(new Date(evt.start_time), "h:mm a")}`}>
                       <p className="text-xs font-semibold leading-tight truncate" style={{ color: textColor }}>
                         {evt.source === "ical" && "🔗 "}
@@ -855,12 +967,16 @@ function MonthView({
   events,
   members,
   onDayClick,
+  onEventClick,
+  onMealClick,
   now,
 }: {
   selectedDate: Date;
   events: CalendarEvent[];
   members: FamilyMember[];
   onDayClick: (date: Date) => void;
+  onEventClick: (e: CalendarEvent) => void;
+  onMealClick: (e: CalendarEvent) => void;
   now: Date;
 }) {
   const monthStart = startOfMonth(selectedDate);
@@ -947,9 +1063,10 @@ function MonthView({
                       return (
                         <div
                           key={evt.id}
-                          className="text-[10px] font-medium px-1 py-px rounded leading-tight truncate"
+                          className="text-[10px] font-medium px-1 py-px rounded leading-tight truncate hover:opacity-80 transition-opacity"
                           style={{ backgroundColor: color, color: textColor }}
                           title={evt.title}
+                          onClick={(e) => { e.stopPropagation(); isMeal ? onMealClick(evt) : onEventClick(evt); }}
                         >
                           {isMeal ? "🍽 " : ""}{evt.title}
                         </div>
