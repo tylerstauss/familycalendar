@@ -7,11 +7,24 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const items = await sql`
-    SELECT * FROM food_items WHERE family_id = ${familyId} ORDER BY name ASC
-  `;
+  const [items, links] = await Promise.all([
+    sql`SELECT * FROM food_items WHERE family_id = ${familyId} ORDER BY name ASC`,
+    sql`SELECT * FROM food_item_links WHERE family_id = ${familyId} ORDER BY created_at ASC`,
+  ]);
 
-  return NextResponse.json(items);
+  const linksByItemId = new Map<string, typeof links>();
+  for (const link of links) {
+    const itemId = link.food_item_id as string;
+    if (!linksByItemId.has(itemId)) linksByItemId.set(itemId, []);
+    linksByItemId.get(itemId)!.push(link);
+  }
+
+  const result = items.map((item) => ({
+    ...item,
+    links: linksByItemId.get(item.id as string) ?? [],
+  }));
+
+  return NextResponse.json(result);
 }
 
 export async function POST(req: NextRequest) {
@@ -58,6 +71,7 @@ export async function DELETE(req: NextRequest) {
   const { familyId } = auth.session;
 
   const { id } = await req.json();
+  await sql`DELETE FROM food_item_links WHERE food_item_id = ${id} AND family_id = ${familyId}`;
   await sql`DELETE FROM food_items WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ok: true });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { GroceryItem, FoodItem, Meal } from "@/lib/types";
+import { GroceryItem, FoodItem, FoodItemLink, Meal } from "@/lib/types";
 import { format, addDays } from "date-fns";
 
 export default function ListsPage() {
@@ -56,6 +56,7 @@ function FoodTab() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     const res = await fetch("/api/food-items");
@@ -106,7 +107,50 @@ function FoodTab() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
+    if (expandedId === id) setExpandedId(null);
     fetchItems();
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const addLink = async (itemId: string, link: { store_name: string; url: string; price: string }) => {
+    const res = await fetch("/api/food-items/links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        food_item_id: itemId,
+        store_name: link.store_name,
+        url: link.url,
+        price: link.price !== "" ? parseFloat(link.price) : null,
+      }),
+    });
+    if (res.ok) {
+      const newLink: FoodItemLink = await res.json();
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? { ...item, links: [...(item.links ?? []), newLink] }
+            : item
+        )
+      );
+    }
+  };
+
+  const removeLink = async (itemId: string, linkId: string) => {
+    await fetch("/api/food-items/links", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: linkId }),
+    });
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? { ...item, links: (item.links ?? []).filter((l) => l.id !== linkId) }
+          : item
+      )
+    );
   };
 
   return (
@@ -169,32 +213,150 @@ function FoodTab() {
                 </button>
               </div>
             ) : (
-              <div
-                key={item.id}
-                className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100"
-              >
-                <span className="flex-1 text-lg text-gray-900">{item.name}</span>
-                <button
-                  onClick={() => startEdit(item)}
-                  className="text-gray-300 hover:text-indigo-500 p-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => deleteItem(item.id)}
-                  className="text-gray-300 hover:text-red-500 p-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+              <div key={item.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <span className="flex-1 text-lg text-gray-900">{item.name}</span>
+                  <button
+                    onClick={() => toggleExpanded(item.id)}
+                    className={`p-1 transition-colors ${
+                      expandedId === item.id ? "text-indigo-500" : "text-gray-300 hover:text-indigo-400"
+                    }`}
+                    title="Store links"
+                  >
+                    {/* chain/link icon */}
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => startEdit(item)}
+                    className="text-gray-300 hover:text-indigo-500 p-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => deleteItem(item.id)}
+                    className="text-gray-300 hover:text-red-500 p-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {expandedId === item.id && (
+                  <LinksPanel
+                    item={item}
+                    onAddLink={addLink}
+                    onRemoveLink={removeLink}
+                  />
+                )}
               </div>
             )
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function LinksPanel({
+  item,
+  onAddLink,
+  onRemoveLink,
+}: {
+  item: FoodItem;
+  onAddLink: (itemId: string, link: { store_name: string; url: string; price: string }) => Promise<void>;
+  onRemoveLink: (itemId: string, linkId: string) => Promise<void>;
+}) {
+  const [storeName, setStoreName] = useState("");
+  const [url, setUrl] = useState("");
+  const [price, setPrice] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  const handleAdd = async () => {
+    if (!storeName.trim() || !url.trim()) return;
+    setAdding(true);
+    await onAddLink(item.id, { store_name: storeName, url, price });
+    setStoreName("");
+    setUrl("");
+    setPrice("");
+    setAdding(false);
+  };
+
+  const links = item.links ?? [];
+
+  return (
+    <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-3">
+      {links.length > 0 && (
+        <div className="space-y-2">
+          {links.map((link) => (
+            <div key={link.id} className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-gray-100">
+              <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-lg px-2 py-0.5 shrink-0">
+                {link.store_name}
+              </span>
+              {link.price != null && (
+                <span className="text-xs font-semibold text-green-700 bg-green-50 rounded-lg px-2 py-0.5 shrink-0">
+                  ${Number(link.price).toFixed(2)}
+                </span>
+              )}
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-xs text-indigo-500 hover:text-indigo-700 truncate min-w-0"
+              >
+                {link.url}
+              </a>
+              <button
+                onClick={() => onRemoveLink(item.id, link.id)}
+                className="text-gray-300 hover:text-red-500 shrink-0 p-0.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Store name"
+            className="w-28 px-2 py-1.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900"
+          />
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="URL"
+            className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900 min-w-0"
+          />
+          <input
+            type="number"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Price"
+            step="0.01"
+            min="0"
+            className="w-20 px-2 py-1.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={!storeName.trim() || !url.trim() || adding}
+            className="px-3 py-1.5 text-sm bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 disabled:opacity-50 shrink-0"
+          >
+            Add
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

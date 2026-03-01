@@ -46,9 +46,19 @@ export interface CalendarEvent {
   created_at?: string;
 }
 
+export interface FoodItemLink {
+  id: string;
+  food_item_id: string;
+  store_name: string;
+  url: string;
+  price?: number | null;
+  created_at?: string;
+}
+
 export interface FoodItem {
   id: string;
   name: string;
+  links?: FoodItemLink[];
   created_at?: string;
 }
 
