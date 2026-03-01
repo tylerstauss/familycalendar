@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, newId } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
+import { createGoogleEvent, updateGoogleEvent, deleteGoogleEvent } from "@/lib/google-calendar";
+import { CalendarEvent } from "@/lib/types";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -62,10 +64,16 @@ export async function POST(req: NextRequest) {
   `;
 
   const [event] = await sql`SELECT * FROM events WHERE id = ${id} AND family_id = ${familyId}`;
-  return NextResponse.json(
-    { ...event, assignee_ids: JSON.parse((event.assignee_ids as string) || "[]") },
-    { status: 201 }
-  );
+  const parsed: CalendarEvent = { ...event, assignee_ids: JSON.parse((event.assignee_ids as string) || "[]") } as CalendarEvent;
+
+  // Sync to Google Calendar (fire-and-forget — local save already succeeded)
+  const googleId = await createGoogleEvent(familyId, parsed);
+  if (googleId) {
+    await sql`UPDATE events SET google_event_id = ${googleId} WHERE id = ${id} AND family_id = ${familyId}`;
+    parsed.recurrence = parsed.recurrence; // keep shape
+  }
+
+  return NextResponse.json({ ...parsed, google_event_id: googleId ?? "" }, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {
@@ -87,7 +95,14 @@ export async function PUT(req: NextRequest) {
   `;
 
   const [event] = await sql`SELECT * FROM events WHERE id = ${id} AND family_id = ${familyId}`;
-  return NextResponse.json({ ...event, assignee_ids: JSON.parse((event.assignee_ids as string) || "[]") });
+  const parsed: CalendarEvent = { ...event, assignee_ids: JSON.parse((event.assignee_ids as string) || "[]") } as CalendarEvent;
+
+  // Sync update to Google Calendar
+  if (event.google_event_id) {
+    await updateGoogleEvent(familyId, event.google_event_id as string, parsed);
+  }
+
+  return NextResponse.json(parsed);
 }
 
 export async function DELETE(req: NextRequest) {
@@ -96,6 +111,13 @@ export async function DELETE(req: NextRequest) {
   const { familyId } = auth.session;
 
   const { id } = await req.json();
+
+  // Delete from Google Calendar before removing from DB
+  const rows = await sql`SELECT google_event_id FROM events WHERE id = ${id} AND family_id = ${familyId}`;
+  if (rows[0]?.google_event_id) {
+    await deleteGoogleEvent(familyId, rows[0].google_event_id as string);
+  }
+
   await sql`DELETE FROM events WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json({ ok: true });
 }
