@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [calUrls, setCalUrls] = useState<Record<string, string>>({});
   const [calSaved, setCalSaved] = useState<Record<string, boolean>>({});
   const [calSaving, setCalSaving] = useState<Record<string, boolean>>({});
+  const [calColorPickerId, setCalColorPickerId] = useState<string | null>(null);
   const [showAddCal, setShowAddCal] = useState(false);
   const [newCalName, setNewCalName] = useState("");
   const [newCalColor, setNewCalColor] = useState(FAMILY_CALENDAR_COLORS[0]);
@@ -135,6 +136,16 @@ export default function SettingsPage() {
     setCalSaving((prev) => ({ ...prev, [calId]: false }));
     setCalSaved((prev) => ({ ...prev, [calId]: true }));
     setTimeout(() => setCalSaved((prev) => ({ ...prev, [calId]: false })), 2000);
+    fetchFamilyCalendars();
+  };
+
+  const handleChangeCalColor = async (calId: string, color: string) => {
+    setCalColorPickerId(null);
+    await fetch("/api/family-calendars", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: calId, color }),
+    });
     fetchFamilyCalendars();
   };
 
@@ -367,13 +378,25 @@ export default function SettingsPage() {
             <div className="space-y-4 mb-4">
               {familyCalendars.map((cal) => {
                 const isHidden = Boolean(cal.hidden);
+                const isPickingColor = calColorPickerId === cal.id;
                 return (
-                <div key={cal.id}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                      <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: cal.color }} />
-                      {cal.name}
-                    </label>
+                <div key={cal.id} className="rounded-xl overflow-hidden border border-gray-100">
+                  <div className="flex items-center justify-between p-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCalColorPickerId(isPickingColor ? null : cal.id)}
+                        title="Change color"
+                        className="relative w-7 h-7 rounded-full flex-shrink-0 ring-2 ring-transparent hover:ring-gray-300 transition-all"
+                        style={{ backgroundColor: cal.color }}
+                      >
+                        <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
+                          <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z" />
+                          </svg>
+                        </span>
+                      </button>
+                      <span className="text-sm font-medium text-gray-700">{cal.name}</span>
+                    </div>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleToggleCalendarHidden(cal.id, isHidden)}
@@ -398,7 +421,19 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  {isPickingColor && (
+                    <div className="px-3 pb-3 flex gap-2 flex-wrap border-t border-gray-100 pt-2">
+                      {FAMILY_CALENDAR_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => handleChangeCalColor(cal.id, c)}
+                          className={`w-7 h-7 rounded-full transition-transform ${cal.color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"}`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2 px-3 pb-3">
                     <input
                       type="url"
                       value={calUrls[cal.id] || ""}
