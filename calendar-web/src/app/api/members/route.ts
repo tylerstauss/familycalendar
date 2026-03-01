@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const { id, ical_url, hidden } = await req.json();
+  const { id, ical_url, hidden, color } = await req.json();
   if (!id) {
     return NextResponse.json({ error: "Member id is required" }, { status: 400 });
   }
@@ -54,6 +54,15 @@ export async function PUT(req: NextRequest) {
   if (hidden !== undefined) {
     await sql`
       UPDATE family_members SET hidden = ${hidden ? 1 : 0} WHERE id = ${id} AND family_id = ${familyId}
+    `;
+  }
+
+  if (color !== undefined) {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+      return NextResponse.json({ error: "Invalid color" }, { status: 400 });
+    }
+    await sql`
+      UPDATE family_members SET color = ${color} WHERE id = ${id} AND family_id = ${familyId}
     `;
   }
 

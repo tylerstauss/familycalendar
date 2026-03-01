@@ -7,6 +7,7 @@ export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [newMember, setNewMember] = useState("");
   const [adding, setAdding] = useState(false);
+  const [colorPickerId, setColorPickerId] = useState<string | null>(null);
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>({});
   const [icalSaved, setIcalSaved] = useState<Record<string, boolean>>({});
   const [icalSaving, setIcalSaving] = useState<Record<string, boolean>>({});
@@ -74,6 +75,16 @@ export default function SettingsPage() {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
+    });
+    fetchMembers();
+  };
+
+  const handleChangeColor = async (memberId: string, color: string) => {
+    setColorPickerId(null);
+    await fetch("/api/members", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: memberId, color }),
     });
     fetchMembers();
   };
@@ -214,21 +225,44 @@ export default function SettingsPage() {
             <div className="space-y-2 mb-4">
               {members.map((m) => {
                 const textColor = getMemberTextColor(m.color);
+                const isPickingColor = colorPickerId === m.id;
                 return (
-                  <div key={m.id} className="flex items-center justify-between p-3 rounded-xl" style={{ backgroundColor: `${m.color}30` }}>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                        style={{ backgroundColor: m.color, color: textColor }}>
-                        {m.name[0].toUpperCase()}
+                  <div key={m.id} className="rounded-xl overflow-hidden" style={{ backgroundColor: `${m.color}30` }}>
+                    <div className="flex items-center justify-between p-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setColorPickerId(isPickingColor ? null : m.id)}
+                          title="Change color"
+                          className="relative w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ring-2 ring-transparent hover:ring-gray-300 transition-all"
+                          style={{ backgroundColor: m.color, color: textColor }}>
+                          {m.name[0].toUpperCase()}
+                          <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
+                            <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z" />
+                            </svg>
+                          </span>
+                        </button>
+                        <p className="font-medium text-gray-900">{m.name}</p>
                       </div>
-                      <p className="font-medium text-gray-900">{m.name}</p>
+                      <button onClick={() => handleRemove(m.id, m.name)}
+                        className="text-gray-400 hover:text-red-500 p-1">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
-                    <button onClick={() => handleRemove(m.id, m.name)}
-                      className="text-gray-400 hover:text-red-500 p-1">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                    {isPickingColor && (
+                      <div className="px-3 pb-3 flex gap-2 flex-wrap">
+                        {MEMBER_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => handleChangeColor(m.id, c)}
+                            className={`w-7 h-7 rounded-full transition-transform ${m.color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"}`}
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

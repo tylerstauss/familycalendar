@@ -143,6 +143,23 @@ function localToUTC(y: number, mo: number, d: number, h: number, m: number, s: n
   return new Date(Date.UTC(y, mo, d, h, m, s));
 }
 
+// Extract the "intended local date" from a range boundary Date.
+// The API creates these as new Date(`${date}T00:00:00`) on the UTC server,
+// so their UTC components (year/month/day) encode the LOCAL calendar date.
+function rangeNominal(dt: Date): Date {
+  return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+}
+
+// Local date (as nominal UTC) of a UTC timestamp in the given timezone.
+// Falls back to UTC-component date when no TZID is provided (e.g. all-day events).
+function localDateNominal(dt: Date, tzid?: string): Date {
+  if (tzid) {
+    const lc = getLocalComponents(dt, tzid);
+    return new Date(Date.UTC(lc.y, lc.mo, lc.d));
+  }
+  return rangeNominal(dt);
+}
+
 function expandRRule(
   rrule: RRule,
   dtstart: Date,
