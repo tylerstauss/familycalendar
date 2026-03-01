@@ -54,6 +54,8 @@ function FoodTab() {
   const [items, setItems] = useState<FoodItem[]>([]);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const fetchItems = useCallback(async () => {
     const res = await fetch("/api/food-items");
@@ -78,6 +80,26 @@ function FoodTab() {
     setSaving(false);
   };
 
+  const startEdit = (item: FoodItem) => {
+    setEditingId(item.id);
+    setEditingName(item.name);
+  };
+
+  const saveEdit = async (id: string) => {
+    const name = editingName.trim();
+    if (name) {
+      await fetch("/api/food-items", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name }),
+      });
+      await fetchItems();
+    }
+    setEditingId(null);
+  };
+
+  const cancelEdit = () => setEditingId(null);
+
   const deleteItem = async (id: string) => {
     await fetch("/api/food-items", {
       method: "DELETE",
@@ -97,22 +119,62 @@ function FoodTab() {
         </div>
       ) : (
         <div className="space-y-1">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100"
-            >
-              <span className="flex-1 text-lg text-gray-900">{item.name}</span>
-              <button
-                onClick={() => deleteItem(item.id)}
-                className="text-gray-300 hover:text-red-500 p-1"
+          {items.map((item) =>
+            editingId === item.id ? (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 bg-white rounded-2xl px-3 py-2 border border-indigo-200"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveEdit(item.id);
+                    if (e.key === "Escape") cancelEdit();
+                  }}
+                  className="flex-1 px-2 py-1 text-lg text-gray-900 bg-transparent outline-none"
+                  autoFocus
+                />
+                <button
+                  onClick={() => saveEdit(item.id)}
+                  disabled={!editingName.trim()}
+                  className="px-3 py-1 text-sm bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 rounded-xl border border-gray-200"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-gray-100"
+              >
+                <span className="flex-1 text-lg text-gray-900">{item.name}</span>
+                <button
+                  onClick={() => startEdit(item)}
+                  className="text-gray-300 hover:text-indigo-500 p-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => deleteItem(item.id)}
+                  className="text-gray-300 hover:text-red-500 p-1"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )
+          )}
         </div>
       )}
 
@@ -278,6 +340,7 @@ function MealModal({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(meal?.name ?? "");
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(
     new Set(meal?.food_item_ids ?? [])
   );
@@ -294,6 +357,10 @@ function MealModal({
     if (!name.trim()) return;
     onSave(name.trim(), Array.from(selected));
   };
+
+  const filtered = search.trim()
+    ? foodItems.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    : foodItems;
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
@@ -320,21 +387,32 @@ function MealModal({
           {foodItems.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Food items</label>
-              <div className="space-y-1 max-h-52 overflow-y-auto border border-gray-100 rounded-xl p-2">
-                {foodItems.map((f) => (
-                  <label
-                    key={f.id}
-                    className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(f.id)}
-                      onChange={() => toggle(f.id)}
-                      className="w-4 h-4 rounded text-indigo-500 border-gray-300 focus:ring-indigo-400"
-                    />
-                    <span className="text-gray-800">{f.name}</span>
-                  </label>
-                ))}
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full px-3 py-2 mb-2 border border-gray-200 rounded-xl text-sm text-gray-900 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                placeholder="Search foods..."
+              />
+              <div className="space-y-1 max-h-48 overflow-y-auto border border-gray-100 rounded-xl p-2">
+                {filtered.length === 0 ? (
+                  <p className="text-sm text-gray-400 px-2 py-2">No matches</p>
+                ) : (
+                  filtered.map((f) => (
+                    <label
+                      key={f.id}
+                      className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(f.id)}
+                        onChange={() => toggle(f.id)}
+                        className="w-4 h-4 rounded text-indigo-500 border-gray-300 focus:ring-indigo-400"
+                      />
+                      <span className="text-gray-800">{f.name}</span>
+                    </label>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -378,25 +456,49 @@ function ShoppingTab() {
   const fetchSuggested = useCallback(async (currentItems: GroceryItem[]) => {
     const today = new Date();
     const start = format(today, "yyyy-MM-dd");
-    const end = format(addDays(today, 6), "yyyy-MM-dd");
+    const end = format(addDays(today, 4), "yyyy-MM-dd");
 
-    const mealRes = await fetch(`/api/meal-plans?start=${start}&end=${end}`);
-    if (!mealRes.ok) return;
+    const [mealRes, mealsRes, foodRes] = await Promise.all([
+      fetch(`/api/meal-plans?start=${start}&end=${end}`),
+      fetch("/api/meals"),
+      fetch("/api/food-items"),
+    ]);
+    if (!mealRes.ok || !mealsRes.ok || !foodRes.ok) return;
 
-    const mealPlans = await mealRes.json();
+    const [mealPlans, savedMeals, foodItems]: [
+      Array<{ food_item_id?: string; food_name?: string }>,
+      Meal[],
+      FoodItem[]
+    ] = await Promise.all([mealRes.json(), mealsRes.json(), foodRes.json()]);
 
-    // Collect food names from this week's meal plans
+    const mealMap = new Map(savedMeals.map((m) => [m.id, m]));
+    const foodMap = new Map(foodItems.map((f) => [f.id, f.name]));
     const existingNames = new Set(currentItems.map((i) => i.name.toLowerCase().trim()));
     const seen = new Set<string>();
     const suggestions: string[] = [];
 
     for (const plan of mealPlans) {
-      const name = plan.food_name || plan.recipe_name || "";
-      if (!name) continue;
-      const key = name.toLowerCase().trim();
-      if (!seen.has(key) && !existingNames.has(key)) {
-        seen.add(key);
-        suggestions.push(name.trim());
+      // If plan references a saved meal, expand its food items
+      if (plan.food_item_id && mealMap.has(plan.food_item_id)) {
+        const meal = mealMap.get(plan.food_item_id)!;
+        for (const fid of meal.food_item_ids) {
+          const name = foodMap.get(fid);
+          if (!name) continue;
+          const key = name.toLowerCase().trim();
+          if (!seen.has(key) && !existingNames.has(key)) {
+            seen.add(key);
+            suggestions.push(name);
+          }
+        }
+      } else {
+        // Custom text meal — suggest the meal name itself
+        const name = plan.food_name ?? "";
+        if (!name) continue;
+        const key = name.toLowerCase().trim();
+        if (!seen.has(key) && !existingNames.has(key)) {
+          seen.add(key);
+          suggestions.push(name.trim());
+        }
       }
     }
 
@@ -487,9 +589,9 @@ function ShoppingTab() {
         <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h2 className="text-sm font-semibold text-indigo-800">From this week&apos;s meals</h2>
+              <h2 className="text-sm font-semibold text-indigo-800">From upcoming meals</h2>
               <p className="text-xs text-indigo-500 mt-0.5">
-                {suggested.length} meal{suggested.length !== 1 ? "s" : ""} planned this week
+                {suggested.length} item{suggested.length !== 1 ? "s" : ""} from the next 5 days
               </p>
             </div>
             <button
