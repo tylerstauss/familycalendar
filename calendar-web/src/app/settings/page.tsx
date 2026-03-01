@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FamilyMember, FamilyCalendar, Photo, MEMBER_COLORS, FAMILY_CALENDAR_COLORS, getMemberTextColor } from "@/lib/types";
+import { FamilyMember, FamilyCalendar, Photo, getMemberTextColor } from "@/lib/types";
+import ColorPicker from "@/components/ColorPicker";
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [newMember, setNewMember] = useState("");
   const [adding, setAdding] = useState(false);
-  const [colorPickerId, setColorPickerId] = useState<string | null>(null);
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>({});
   const [icalSaved, setIcalSaved] = useState<Record<string, boolean>>({});
   const [icalSaving, setIcalSaving] = useState<Record<string, boolean>>({});
@@ -17,10 +17,9 @@ export default function SettingsPage() {
   const [calUrls, setCalUrls] = useState<Record<string, string>>({});
   const [calSaved, setCalSaved] = useState<Record<string, boolean>>({});
   const [calSaving, setCalSaving] = useState<Record<string, boolean>>({});
-  const [calColorPickerId, setCalColorPickerId] = useState<string | null>(null);
   const [showAddCal, setShowAddCal] = useState(false);
   const [newCalName, setNewCalName] = useState("");
-  const [newCalColor, setNewCalColor] = useState(FAMILY_CALENDAR_COLORS[0]);
+  const [newCalColor, setNewCalColor] = useState("#6366F1");
   const [newCalUrl, setNewCalUrl] = useState("");
   const [addingCal, setAddingCal] = useState(false);
 
@@ -81,7 +80,6 @@ export default function SettingsPage() {
   };
 
   const handleChangeColor = async (memberId: string, color: string) => {
-    setColorPickerId(null);
     await fetch("/api/members", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -119,7 +117,7 @@ export default function SettingsPage() {
       body: JSON.stringify({ name, color: newCalColor }),
     });
     setNewCalName("");
-    setNewCalColor(FAMILY_CALENDAR_COLORS[0]);
+    setNewCalColor("#6366F1");
     setNewCalUrl("");
     setShowAddCal(false);
     setAddingCal(false);
@@ -140,7 +138,6 @@ export default function SettingsPage() {
   };
 
   const handleChangeCalColor = async (calId: string, color: string) => {
-    setCalColorPickerId(null);
     await fetch("/api/family-calendars", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -236,23 +233,20 @@ export default function SettingsPage() {
             <div className="space-y-2 mb-4">
               {members.map((m) => {
                 const textColor = getMemberTextColor(m.color);
-                const isPickingColor = colorPickerId === m.id;
                 return (
                   <div key={m.id} className="rounded-xl overflow-hidden" style={{ backgroundColor: `${m.color}30` }}>
                     <div className="flex items-center justify-between p-3">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setColorPickerId(isPickingColor ? null : m.id)}
-                          title="Change color"
-                          className="relative w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ring-2 ring-transparent hover:ring-gray-300 transition-all"
-                          style={{ backgroundColor: m.color, color: textColor }}>
+                        <ColorPicker
+                          value={m.color}
+                          onChange={(color) => handleChangeColor(m.id, color)}
+                        />
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold"
+                          style={{ backgroundColor: m.color, color: textColor }}
+                        >
                           {m.name[0].toUpperCase()}
-                          <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
-                            <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z" />
-                            </svg>
-                          </span>
-                        </button>
+                        </div>
                         <p className="font-medium text-gray-900">{m.name}</p>
                       </div>
                       <button onClick={() => handleRemove(m.id, m.name)}
@@ -262,18 +256,6 @@ export default function SettingsPage() {
                         </svg>
                       </button>
                     </div>
-                    {isPickingColor && (
-                      <div className="px-3 pb-3 flex gap-2 flex-wrap">
-                        {MEMBER_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            onClick={() => handleChangeColor(m.id, c)}
-                            className={`w-7 h-7 rounded-full transition-transform ${m.color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"}`}
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -378,23 +360,14 @@ export default function SettingsPage() {
             <div className="space-y-4 mb-4">
               {familyCalendars.map((cal) => {
                 const isHidden = Boolean(cal.hidden);
-                const isPickingColor = calColorPickerId === cal.id;
                 return (
                 <div key={cal.id} className="rounded-xl overflow-hidden border border-gray-100">
                   <div className="flex items-center justify-between p-3">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCalColorPickerId(isPickingColor ? null : cal.id)}
-                        title="Change color"
-                        className="relative w-7 h-7 rounded-full flex-shrink-0 ring-2 ring-transparent hover:ring-gray-300 transition-all"
-                        style={{ backgroundColor: cal.color }}
-                      >
-                        <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-white rounded-full flex items-center justify-center shadow-sm">
-                          <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 11l6-6 3 3-6 6H9v-3z" />
-                          </svg>
-                        </span>
-                      </button>
+                      <ColorPicker
+                        value={cal.color}
+                        onChange={(color) => handleChangeCalColor(cal.id, color)}
+                      />
                       <span className="text-sm font-medium text-gray-700">{cal.name}</span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -421,18 +394,6 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   </div>
-                  {isPickingColor && (
-                    <div className="px-3 pb-3 flex gap-2 flex-wrap border-t border-gray-100 pt-2">
-                      {FAMILY_CALENDAR_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => handleChangeCalColor(cal.id, c)}
-                          className={`w-7 h-7 rounded-full transition-transform ${cal.color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"}`}
-                          style={{ backgroundColor: c }}
-                        />
-                      ))}
-                    </div>
-                  )}
                   <div className="flex gap-2 px-3 pb-3">
                     <input
                       type="url"
@@ -467,18 +428,10 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900 text-sm"
                 placeholder="Calendar name (e.g. School, Sports)"
               />
-              <div>
-                <p className="text-xs text-gray-500 mb-2">Color</p>
-                <div className="flex gap-2 flex-wrap">
-                  {FAMILY_CALENDAR_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setNewCalColor(c)}
-                      className={`w-7 h-7 rounded-full transition-transform ${newCalColor === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-gray-500">Color</p>
+                <ColorPicker value={newCalColor} onChange={setNewCalColor} />
+                <span className="text-sm font-mono text-gray-500">{newCalColor}</span>
               </div>
               <input
                 type="url"

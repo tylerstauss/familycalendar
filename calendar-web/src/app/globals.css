@@ -35,6 +35,27 @@ html {
   outline-offset: 2px;
 }
 
+/* Color picker hue slider thumb */
+input[type="range"].hue-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  cursor: pointer;
+}
+input[type="range"].hue-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid rgba(0,0,0,0.2);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  cursor: pointer;
+}
+
 /* Safe area padding for devices with home indicator */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
