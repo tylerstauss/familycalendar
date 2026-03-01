@@ -71,7 +71,7 @@ export default function CalendarPage() {
       const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour duration
       return {
         id: `meal-${mp.id}`,
-        title: `${time.label}: ${mp.recipe_name}`,
+        title: `${time.label}: ${mp.food_name}`,
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
         location: "",

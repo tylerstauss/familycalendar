@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 const tabs = [
   { href: "/", label: "Calendar", icon: CalendarIcon },
   { href: "/meals", label: "Meals", icon: MealsIcon },
-  { href: "/grocery", label: "Lists", icon: GroceryIcon },
+  { href: "/lists", label: "Lists", icon: GroceryIcon },
   { href: "/photos", label: "Photos", icon: PhotosIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];

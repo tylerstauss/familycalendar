@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
 
   const parsed = plans.map((p: Record<string, unknown>) => ({
     ...p,
+    food_item_id: p.recipe_id,
+    food_name: p.recipe_name,
     assignee_ids: JSON.parse((p.assignee_ids as string) || "[]"),
   }));
 
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const { date, meal_type, recipe_id, recipe_name, notes, assignee_ids } = await req.json();
+  const { date, meal_type, food_item_id, food_name, notes, assignee_ids } = await req.json();
   if (!date || !meal_type) {
     return NextResponse.json({ error: "Date and meal_type required" }, { status: 400 });
   }
@@ -50,12 +52,12 @@ export async function POST(req: NextRequest) {
   const id = newId();
   await sql`
     INSERT INTO meal_plans (id, family_id, date, meal_type, recipe_id, recipe_name, notes, assignee_ids)
-    VALUES (${id}, ${familyId}, ${date}, ${meal_type}, ${recipe_id || null}, ${recipe_name || ""}, ${notes || ""}, ${JSON.stringify(assignee_ids || [])})
+    VALUES (${id}, ${familyId}, ${date}, ${meal_type}, ${food_item_id || null}, ${food_name || ""}, ${notes || ""}, ${JSON.stringify(assignee_ids || [])})
   `;
 
   const [plan] = await sql`SELECT * FROM meal_plans WHERE id = ${id} AND family_id = ${familyId}`;
   return NextResponse.json(
-    { ...plan, assignee_ids: JSON.parse((plan.assignee_ids as string) || "[]") },
+    { ...plan, food_item_id: plan.recipe_id, food_name: plan.recipe_name, assignee_ids: JSON.parse((plan.assignee_ids as string) || "[]") },
     { status: 201 }
   );
 }
@@ -65,18 +67,18 @@ export async function PUT(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const { id, date, meal_type, recipe_id, recipe_name, notes, assignee_ids } = await req.json();
+  const { id, date, meal_type, food_item_id, food_name, notes, assignee_ids } = await req.json();
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
   await sql`
     UPDATE meal_plans
-    SET date = ${date}, meal_type = ${meal_type}, recipe_id = ${recipe_id || null},
-        recipe_name = ${recipe_name || ""}, notes = ${notes || ""}, assignee_ids = ${JSON.stringify(assignee_ids || [])}
+    SET date = ${date}, meal_type = ${meal_type}, recipe_id = ${food_item_id || null},
+        recipe_name = ${food_name || ""}, notes = ${notes || ""}, assignee_ids = ${JSON.stringify(assignee_ids || [])}
     WHERE id = ${id} AND family_id = ${familyId}
   `;
 
   const [plan] = await sql`SELECT * FROM meal_plans WHERE id = ${id} AND family_id = ${familyId}`;
-  return NextResponse.json({ ...plan, assignee_ids: JSON.parse((plan.assignee_ids as string) || "[]") });
+  return NextResponse.json({ ...plan, food_item_id: plan.recipe_id, food_name: plan.recipe_name, assignee_ids: JSON.parse((plan.assignee_ids as string) || "[]") });
 }
 
 export async function DELETE(req: NextRequest) {

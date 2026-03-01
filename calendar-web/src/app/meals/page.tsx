@@ -31,11 +31,23 @@ export default function MealsPage() {
     fetchMealPlans();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const assignMeal = async (date: string, mealType: string, mealName: string, mealId?: string) => {
+  const assignMeal = async (
+    date: string,
+    mealType: string,
+    mealName: string,
+    mealId?: string,
+    assigneeIds: string[] = []
+  ) => {
     const res = await fetch("/api/meal-plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, meal_type: mealType, food_item_id: mealId, food_name: mealName }),
+      body: JSON.stringify({
+        date,
+        meal_type: mealType,
+        food_item_id: mealId,
+        food_name: mealName,
+        assignee_ids: assigneeIds,
+      }),
     });
     if (res.ok) await fetchMealPlans();
   };
@@ -85,13 +97,11 @@ function WeeklyMealPlan({
   mealPlans: MealPlan[];
   savedMeals: Meal[];
   members: FamilyMember[];
-  onAssign: (date: string, mealType: string, mealName: string, mealId?: string) => void;
+  onAssign: (date: string, mealType: string, mealName: string, mealId?: string, assigneeIds?: string[]) => void;
   onRemove: (id: string) => void;
 }) {
   const mealTypes = ["breakfast", "lunch", "dinner"] as const;
-
-  // Suppress unused variable warning — members kept for future use
-  void members;
+  const memberMap = new Map(members.map((m) => [m.id, m]));
 
   return (
     <div className="space-y-4">
@@ -104,28 +114,55 @@ function WeeklyMealPlan({
             <h3 className="font-semibold text-gray-900 mb-3">{format(day, "EEEE, MMM d")}</h3>
             <div className="grid grid-cols-3 gap-3">
               {mealTypes.map((type) => {
-                const plan = dayPlans.find((p) => p.meal_type === type);
+                const typePlans = dayPlans.filter((p) => p.meal_type === type);
                 return (
-                  <div key={type} className="min-h-[60px]">
-                    <p className="text-xs text-gray-400 uppercase mb-1">{type}</p>
-                    {plan ? (
-                      <div className="bg-gray-50 rounded-xl p-2 flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-800">{plan.food_name}</span>
-                        <button
-                          onClick={() => onRemove(plan.id)}
-                          className="text-gray-400 hover:text-red-500 p-1.5 -mr-1 rounded-lg"
+                  <div key={type} className="space-y-1.5">
+                    <p className="text-xs text-gray-400 uppercase">{type}</p>
+
+                    {typePlans.map((plan) => {
+                      const member =
+                        plan.assignee_ids.length === 1
+                          ? memberMap.get(plan.assignee_ids[0])
+                          : undefined;
+                      return (
+                        <div
+                          key={plan.id}
+                          className="bg-gray-50 rounded-xl p-2 flex items-start justify-between gap-1"
                         >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ) : (
-                      <MealPicker
-                        savedMeals={savedMeals}
-                        onSelect={(name, id) => onAssign(dateStr, type, name, id)}
-                      />
-                    )}
+                          <div className="min-w-0">
+                            <span className="text-sm font-medium text-gray-800 block truncate">
+                              {plan.food_name}
+                            </span>
+                            {member ? (
+                              <span
+                                className="text-xs font-medium mt-0.5 inline-block px-1.5 py-0.5 rounded-full"
+                                style={{ backgroundColor: member.color, color: "#374151" }}
+                              >
+                                {member.name}
+                              </span>
+                            ) : plan.assignee_ids.length === 0 ? null : (
+                              <span className="text-xs text-gray-400 mt-0.5 block">
+                                {plan.assignee_ids.length} members
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => onRemove(plan.id)}
+                            className="text-gray-400 hover:text-red-500 p-1 shrink-0 -mt-0.5 -mr-0.5 rounded-lg"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    <MealPicker
+                      savedMeals={savedMeals}
+                      members={members}
+                      onSelect={(name, id, assigneeIds) => onAssign(dateStr, type, name, id, assigneeIds)}
+                    />
                   </div>
                 );
               })}
@@ -141,17 +178,19 @@ function WeeklyMealPlan({
 
 function MealPicker({
   savedMeals,
+  members,
   onSelect,
 }: {
   savedMeals: Meal[];
-  onSelect: (name: string, id?: string) => void;
+  members: FamilyMember[];
+  onSelect: (name: string, id?: string, assigneeIds?: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [custom, setCustom] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -163,6 +202,18 @@ function MealPicker({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  const close = () => {
+    setOpen(false);
+    setSearch("");
+    setCustom("");
+    setSelectedMemberId(null);
+  };
+
+  const pick = (name: string, id?: string) => {
+    onSelect(name, id, selectedMemberId ? [selectedMemberId] : []);
+    close();
+  };
+
   const filtered = savedMeals.filter((m) =>
     m.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -173,13 +224,46 @@ function MealPicker({
         onClick={() => setOpen(true)}
         className="w-full border border-dashed border-gray-200 rounded-xl p-2 text-sm text-gray-400 hover:text-gray-600 hover:border-gray-300"
       >
-        + Add meal
+        + Add
       </button>
     );
   }
 
   return (
-    <div ref={containerRef} className="bg-white border border-gray-200 rounded-xl shadow-lg p-2 space-y-1">
+    <div ref={containerRef} className="bg-white border border-gray-200 rounded-xl shadow-lg p-2 space-y-1.5">
+      {/* Member selector */}
+      {members.length > 0 && (
+        <div className="flex flex-wrap gap-1 pb-1.5 border-b border-gray-100">
+          <button
+            onClick={() => setSelectedMemberId(null)}
+            className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+              selectedMemberId === null
+                ? "bg-gray-700 text-white border-gray-700"
+                : "text-gray-500 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            Everyone
+          </button>
+          {members.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setSelectedMemberId(m.id === selectedMemberId ? null : m.id)}
+              className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                selectedMemberId === m.id ? "border-transparent" : "border-transparent"
+              }`}
+              style={
+                selectedMemberId === m.id
+                  ? { backgroundColor: m.color, color: "#1f2937" }
+                  : { backgroundColor: m.color + "60", color: "#6b7280" }
+              }
+            >
+              {m.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Search */}
       {savedMeals.length > 5 && (
         <input
           type="text"
@@ -187,52 +271,49 @@ function MealPicker({
           onChange={(e) => setSearch(e.target.value)}
           className="w-full text-sm px-2 py-1.5 border border-gray-200 rounded-lg text-gray-900 focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400"
           placeholder="Search meals..."
-          autoFocus
+          autoFocus={members.length === 0}
         />
       )}
 
-      <div className="max-h-40 overflow-y-auto space-y-0.5">
+      {/* Saved meals list */}
+      <div className="max-h-36 overflow-y-auto space-y-0.5">
         {filtered.length === 0 && search ? (
           <p className="text-xs text-gray-400 px-2 py-1">No matches</p>
         ) : (
           filtered.map((m) => (
             <button
               key={m.id}
-              onClick={() => { onSelect(m.name, m.id); setOpen(false); setSearch(""); }}
-              className="block w-full text-left text-sm px-2 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 truncate"
+              onClick={() => pick(m.name, m.id)}
+              className="block w-full text-left text-sm px-2 py-1.5 rounded-lg hover:bg-indigo-50 text-gray-700 truncate"
             >
               {m.name}
             </button>
           ))
         )}
+        {savedMeals.length === 0 && (
+          <p className="text-xs text-gray-400 px-2 py-1">
+            Create meals in{" "}
+            <a href="/lists" className="text-indigo-500 underline">
+              Lists
+            </a>
+          </p>
+        )}
       </div>
 
-      {savedMeals.length === 0 && (
-        <p className="text-xs text-gray-400 px-2 py-1">
-          Create meals in{" "}
-          <a href="/lists" className="text-indigo-500 underline">
-            Lists
-          </a>
-        </p>
-      )}
-
+      {/* Custom text + close */}
       <div className="flex gap-1 border-t border-gray-100 pt-1">
         <input
           type="text"
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && custom.trim()) {
-              onSelect(custom.trim());
-              setOpen(false);
-              setCustom("");
-            }
+            if (e.key === "Enter" && custom.trim()) pick(custom.trim());
           }}
           className="flex-1 text-sm px-2 py-1 border border-gray-200 rounded-lg text-gray-900"
-          placeholder="Custom meal..."
+          placeholder="Custom..."
         />
         <button
-          onClick={() => setOpen(false)}
+          onClick={close}
           className="text-gray-400 hover:text-gray-600 p-2 rounded-lg shrink-0"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
