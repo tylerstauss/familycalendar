@@ -111,6 +111,24 @@ function FoodTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addItem()}
+          className="flex-1 px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900 text-lg"
+          placeholder="Add a food (e.g. Tacos)..."
+        />
+        <button
+          onClick={addItem}
+          disabled={!newName.trim() || saving}
+          className="px-6 py-3 bg-indigo-500 text-white rounded-2xl hover:bg-indigo-600 font-medium disabled:opacity-50"
+        >
+          Add
+        </button>
+      </div>
+
       {items.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-5xl mb-4">🍽️</p>
@@ -177,24 +195,6 @@ function FoodTab() {
           )}
         </div>
       )}
-
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addItem()}
-          className="flex-1 px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900 text-lg"
-          placeholder="Add a food (e.g. Tacos)..."
-        />
-        <button
-          onClick={addItem}
-          disabled={!newName.trim() || saving}
-          className="px-6 py-3 bg-indigo-500 text-white rounded-2xl hover:bg-indigo-600 font-medium disabled:opacity-50"
-        >
-          Add
-        </button>
-      </div>
     </div>
   );
 }
