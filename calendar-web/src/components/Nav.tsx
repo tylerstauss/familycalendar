@@ -43,15 +43,6 @@ export default function Nav() {
     <>
       {/* Desktop: vertical left sidebar */}
       <nav className="hidden md:flex fixed left-0 top-0 bottom-0 w-20 bg-white border-r border-gray-100 flex-col items-center py-6 z-40">
-        {/* Brand logo */}
-        <div className="mb-8">
-          <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-            </svg>
-          </div>
-        </div>
-
         {/* Nav items */}
         <div className="flex flex-col items-center gap-2 flex-1">
           {tabs.map((tab) => {

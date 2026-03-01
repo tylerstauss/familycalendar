@@ -117,6 +117,12 @@ export default function CalendarPage() {
     fetchEvents();
   }, [fetchEvents]);
 
+  // Re-fetch events every 15 minutes for kiosk mode
+  useEffect(() => {
+    const interval = setInterval(() => fetchEvents(), 15 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchEvents]);
+
   const navigateDate = (dir: number) => {
     setSelectedDate((d) => {
       if (viewMode === "month") return dir > 0 ? addMonths(d, 1) : subMonths(d, 1);
