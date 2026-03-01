@@ -2,18 +2,18 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Meal, MealPlan, FamilyMember } from "@/lib/types";
-import { format, addDays, startOfWeek } from "date-fns";
+import { format, addDays } from "date-fns";
 
 export default function MealsPage() {
   const [savedMeals, setSavedMeals] = useState<Meal[]>([]);
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
   const [members, setMembers] = useState<FamilyMember[]>([]);
 
-  const [weekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 0 }));
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const [today] = useState(() => new Date());
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i));
 
-  const weekStartStr = format(weekStart, "yyyy-MM-dd");
-  const weekEndStr = format(addDays(weekStart, 6), "yyyy-MM-dd");
+  const weekStartStr = format(today, "yyyy-MM-dd");
+  const weekEndStr = format(addDays(today, 6), "yyyy-MM-dd");
 
   const fetchMealPlans = async () => {
     const res = await fetch(`/api/meal-plans?start=${weekStartStr}&end=${weekEndStr}`);
