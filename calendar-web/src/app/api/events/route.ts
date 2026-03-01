@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const { familyId } = auth.session;
 
   const body = await req.json();
-  const { title, start_time, end_time, location, notes, assignee_ids } = body;
+  const { title, start_time, end_time, location, notes, assignee_ids, recurrence } = body;
 
   if (!title?.trim() || !start_time || !end_time) {
     return NextResponse.json({ error: "Title, start_time, end_time required" }, { status: 400 });
@@ -57,8 +57,8 @@ export async function POST(req: NextRequest) {
 
   const id = newId();
   await sql`
-    INSERT INTO events (id, family_id, title, start_time, end_time, location, notes, assignee_ids)
-    VALUES (${id}, ${familyId}, ${title.trim()}, ${start_time}, ${end_time}, ${location || ""}, ${notes || ""}, ${JSON.stringify(assignee_ids || [])})
+    INSERT INTO events (id, family_id, title, start_time, end_time, location, notes, assignee_ids, recurrence)
+    VALUES (${id}, ${familyId}, ${title.trim()}, ${start_time}, ${end_time}, ${location || ""}, ${notes || ""}, ${JSON.stringify(assignee_ids || [])}, ${recurrence || ""})
   `;
 
   const [event] = await sql`SELECT * FROM events WHERE id = ${id} AND family_id = ${familyId}`;
@@ -74,14 +74,15 @@ export async function PUT(req: NextRequest) {
   const { familyId } = auth.session;
 
   const body = await req.json();
-  const { id, title, start_time, end_time, location, notes, assignee_ids } = body;
+  const { id, title, start_time, end_time, location, notes, assignee_ids, recurrence } = body;
 
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
 
   await sql`
     UPDATE events
     SET title = ${title}, start_time = ${start_time}, end_time = ${end_time},
-        location = ${location || ""}, notes = ${notes || ""}, assignee_ids = ${JSON.stringify(assignee_ids || [])}
+        location = ${location || ""}, notes = ${notes || ""}, assignee_ids = ${JSON.stringify(assignee_ids || [])},
+        recurrence = ${recurrence || ""}
     WHERE id = ${id} AND family_id = ${familyId}
   `;
 

@@ -53,6 +53,7 @@ async function setup() {
       location TEXT DEFAULT '',
       notes TEXT DEFAULT '',
       assignee_ids TEXT DEFAULT '[]',
+      recurrence TEXT DEFAULT '',
       created_at TEXT DEFAULT (NOW()::TEXT)
     )
   `;

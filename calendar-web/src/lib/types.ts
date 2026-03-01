@@ -34,11 +34,12 @@ export interface FamilyCalendar {
 export interface CalendarEvent {
   id: string;
   title: string;
-  start_time: string; // ISO datetime
-  end_time: string;   // ISO datetime
+  start_time: string; // ISO datetime (UTC midnight for all-day events)
+  end_time: string;   // ISO datetime (UTC midnight exclusive for all-day events)
   location: string;
   notes: string;
   assignee_ids: string[]; // member IDs
+  recurrence?: string;    // RRULE string, e.g. "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=1"
   source?: "local" | "ical" | "meal" | "family-ical";
   color?: string; // for family calendar events
   meal_food_items?: string[]; // food item names for meal events
