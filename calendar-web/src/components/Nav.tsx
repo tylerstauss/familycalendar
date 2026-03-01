@@ -9,7 +9,6 @@ const tabs = [
   { href: "/meals", label: "Meals", icon: MealsIcon },
   { href: "/lists", label: "Lists", icon: GroceryIcon },
   { href: "/photos", label: "Photos", icon: PhotosIcon },
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 interface SessionUser {
@@ -67,9 +66,13 @@ export default function Nav() {
         {/* User + logout */}
         {user && (
           <div className="flex flex-col items-center gap-2 mt-4">
-            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold">
+            <Link
+              href="/settings"
+              className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold hover:bg-indigo-200 transition-colors"
+              title="Settings"
+            >
               {user.name.charAt(0).toUpperCase()}
-            </div>
+            </Link>
             <button
               onClick={handleLogout}
               className="text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
