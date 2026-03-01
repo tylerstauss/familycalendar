@@ -554,6 +554,49 @@ export default function SettingsPage() {
           </button>
         </section>
 
+        {/* iPad Kiosk Setup */}
+        <section className="bg-white rounded-2xl border border-gray-100 p-5">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">iPad Kiosk Setup</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Keep the calendar always visible on an iPad, fullscreen with no browser chrome.
+          </p>
+
+          <div className="space-y-5 text-sm text-gray-700">
+            <div>
+              <p className="font-semibold text-gray-900 mb-1.5">Step 1 — Add to Home Screen</p>
+              <p className="text-gray-500 mb-2">This removes the URL bar and tabs so the app fills the screen like a native app.</p>
+              <ol className="ml-4 space-y-1 list-decimal text-gray-600">
+                <li>Open Safari and navigate to this site</li>
+                <li>Tap the <strong>Share</strong> button (box with arrow pointing up) in the toolbar</li>
+                <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
+                <li>Name it (e.g. &ldquo;Family Calendar&rdquo;) and tap <strong>Add</strong></li>
+                <li>Close Safari and open the app from the Home Screen — it will launch fullscreen with no browser chrome</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-1.5">Step 2 — Enable Guided Access</p>
+              <p className="text-gray-500 mb-2">Guided Access locks the iPad to one app so nothing can be accidentally opened.</p>
+              <ol className="ml-4 space-y-1 list-decimal text-gray-600">
+                <li>Go to <strong>Settings → Accessibility → Guided Access</strong></li>
+                <li>Toggle <strong>Guided Access</strong> on</li>
+                <li>Tap <strong>Passcode Settings</strong> and set a passcode (this is how you exit kiosk mode later)</li>
+              </ol>
+            </div>
+
+            <div>
+              <p className="font-semibold text-gray-900 mb-1.5">Step 3 — Start a Guided Access Session</p>
+              <ol className="ml-4 space-y-1 list-decimal text-gray-600">
+                <li>Open the Family Calendar app from the Home Screen</li>
+                <li><strong>Triple-click the Home button</strong> (or the Side button on iPads without a Home button)</li>
+                <li>Tap <strong>Start</strong> in the Guided Access screen</li>
+                <li>The iPad is now locked to the calendar — nothing else can be opened</li>
+              </ol>
+              <p className="mt-2 text-gray-400">To exit: triple-click the Home/Side button, enter your passcode, then tap <strong>End</strong>.</p>
+            </div>
+          </div>
+        </section>
+
         {/* About */}
         <section className="bg-white rounded-2xl border border-gray-100 p-5">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">About</h2>
