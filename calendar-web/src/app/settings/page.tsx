@@ -234,7 +234,7 @@ export default function SettingsPage() {
               {members.map((m) => {
                 const textColor = getMemberTextColor(m.color);
                 return (
-                  <div key={m.id} className="rounded-xl overflow-hidden" style={{ backgroundColor: `${m.color}30` }}>
+                  <div key={m.id} className="rounded-xl" style={{ backgroundColor: `${m.color}30` }}>
                     <div className="flex items-center justify-between p-3">
                       <div className="flex items-center gap-3">
                         <ColorPicker
@@ -361,7 +361,7 @@ export default function SettingsPage() {
               {familyCalendars.map((cal) => {
                 const isHidden = Boolean(cal.hidden);
                 return (
-                <div key={cal.id} className="rounded-xl overflow-hidden border border-gray-100">
+                <div key={cal.id} className="rounded-xl border border-gray-100">
                   <div className="flex items-center justify-between p-3">
                     <div className="flex items-center gap-2">
                       <ColorPicker
