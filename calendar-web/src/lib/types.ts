@@ -44,11 +44,16 @@ export interface CalendarEvent {
   created_at?: string;
 }
 
-export interface Recipe {
+export interface FoodItem {
   id: string;
   name: string;
-  ingredients: string[];
-  instructions: string;
+  created_at?: string;
+}
+
+export interface Meal {
+  id: string;
+  name: string;
+  food_item_ids: string[];
   created_at?: string;
 }
 
@@ -70,8 +75,8 @@ export interface MealPlan {
   id: string;
   date: string;         // YYYY-MM-DD
   meal_type: "breakfast" | "lunch" | "dinner" | "snack";
-  recipe_id?: string;
-  recipe_name: string;
+  food_item_id?: string;
+  food_name: string;
   notes: string;
   assignee_ids: string[];
   created_at?: string;

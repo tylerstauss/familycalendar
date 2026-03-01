@@ -116,6 +116,25 @@ async function setup() {
     )
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS food_items (
+      id TEXT PRIMARY KEY,
+      family_id TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL,
+      created_at TEXT DEFAULT (NOW()::TEXT)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS meals (
+      id TEXT PRIMARY KEY,
+      family_id TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL,
+      food_item_ids TEXT DEFAULT '[]',
+      created_at TEXT DEFAULT (NOW()::TEXT)
+    )
+  `;
+
   console.log("All tables created successfully.");
 }
 
