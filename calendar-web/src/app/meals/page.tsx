@@ -120,10 +120,9 @@ function WeeklyMealPlan({
                     <p className="text-xs text-gray-400 uppercase">{type}</p>
 
                     {typePlans.map((plan) => {
-                      const member =
-                        plan.assignee_ids.length === 1
-                          ? memberMap.get(plan.assignee_ids[0])
-                          : undefined;
+                      const assignedMembers = plan.assignee_ids
+                        .map((id) => memberMap.get(id))
+                        .filter(Boolean) as FamilyMember[];
                       return (
                         <div
                           key={plan.id}
@@ -133,17 +132,18 @@ function WeeklyMealPlan({
                             <span className="text-sm font-medium text-gray-800 block truncate">
                               {plan.food_name}
                             </span>
-                            {member ? (
-                              <span
-                                className="text-xs font-medium mt-0.5 inline-block px-1.5 py-0.5 rounded-full"
-                                style={{ backgroundColor: member.color, color: "#374151" }}
-                              >
-                                {member.name}
-                              </span>
-                            ) : plan.assignee_ids.length === 0 ? null : (
-                              <span className="text-xs text-gray-400 mt-0.5 block">
-                                {plan.assignee_ids.length} members
-                              </span>
+                            {assignedMembers.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {assignedMembers.map((m) => (
+                                  <span
+                                    key={m.id}
+                                    className="text-xs font-medium px-1.5 py-0.5 rounded-full"
+                                    style={{ backgroundColor: m.color, color: "#374151" }}
+                                  >
+                                    {m.name}
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
                           <button
@@ -188,7 +188,7 @@ function MealPicker({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [custom, setCustom] = useState("");
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -206,11 +206,17 @@ function MealPicker({
     setOpen(false);
     setSearch("");
     setCustom("");
-    setSelectedMemberId(null);
+    setSelectedMemberIds([]);
+  };
+
+  const toggleMember = (id: string) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
   };
 
   const pick = (name: string, id?: string) => {
-    onSelect(name, id, selectedMemberId ? [selectedMemberId] : []);
+    onSelect(name, id, selectedMemberIds);
     close();
   };
 
@@ -231,35 +237,36 @@ function MealPicker({
 
   return (
     <div ref={containerRef} className="bg-white border border-gray-200 rounded-xl shadow-lg p-2 space-y-1.5">
-      {/* Member selector */}
+      {/* Member selector (multi-select) */}
       {members.length > 0 && (
         <div className="flex flex-wrap gap-1 pb-1.5 border-b border-gray-100">
           <button
-            onClick={() => setSelectedMemberId(null)}
+            onClick={() => setSelectedMemberIds([])}
             className={`text-xs px-2 py-1 rounded-full border transition-colors ${
-              selectedMemberId === null
+              selectedMemberIds.length === 0
                 ? "bg-gray-700 text-white border-gray-700"
                 : "text-gray-500 border-gray-200 hover:border-gray-300"
             }`}
           >
             Everyone
           </button>
-          {members.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setSelectedMemberId(m.id === selectedMemberId ? null : m.id)}
-              className={`text-xs px-2 py-1 rounded-full border transition-colors ${
-                selectedMemberId === m.id ? "border-transparent" : "border-transparent"
-              }`}
-              style={
-                selectedMemberId === m.id
-                  ? { backgroundColor: m.color, color: "#1f2937" }
-                  : { backgroundColor: m.color + "60", color: "#6b7280" }
-              }
-            >
-              {m.name}
-            </button>
-          ))}
+          {members.map((m) => {
+            const active = selectedMemberIds.includes(m.id);
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleMember(m.id)}
+                className="text-xs px-2 py-1 rounded-full border-2 transition-all"
+                style={
+                  active
+                    ? { backgroundColor: m.color, color: "#1f2937", borderColor: "#374151" }
+                    : { backgroundColor: m.color + "60", color: "#6b7280", borderColor: "transparent" }
+                }
+              >
+                {m.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
