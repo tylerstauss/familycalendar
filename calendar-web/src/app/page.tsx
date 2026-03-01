@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { format, addDays, subDays, addMonths, subMonths, isToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isSameDay, isSameMonth } from "date-fns";
-import { CalendarEvent, FamilyMember, MealPlan, getMemberColumnBg, getMemberTextColor } from "@/lib/types";
+import { CalendarEvent, FamilyMember, Meal, FoodItem, MealPlan, getMemberColumnBg, getMemberTextColor } from "@/lib/types";
 import EventCard from "@/components/EventCard";
 import AddEventModal from "@/components/AddEventModal";
 
@@ -10,9 +10,12 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [savedMeals, setSavedMeals] = useState<Meal[]>([]);
+  const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [mealDetailEvent, setMealDetailEvent] = useState<CalendarEvent | null>(null);
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("day");
   const [now, setNow] = useState(new Date());
 
@@ -22,10 +25,18 @@ export default function CalendarPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch members once
+  // Fetch members, meals, and food items once
   useEffect(() => {
     fetch("/api/members").then((r) => r.json()).then(setMembers);
+    fetch("/api/meals").then((r) => r.json()).then(setSavedMeals);
+    fetch("/api/food-items").then((r) => r.json()).then(setFoodItems);
   }, []);
+
+  // Keep stable refs for meals/food items so fetchEvents can access latest values
+  const savedMealsRef = useRef(savedMeals);
+  const foodItemsRef = useRef(foodItems);
+  useEffect(() => { savedMealsRef.current = savedMeals; }, [savedMeals]);
+  useEffect(() => { foodItemsRef.current = foodItems; }, [foodItems]);
 
   // Fetch events when date or view changes
   const fetchEvents = useCallback(async () => {
@@ -64,11 +75,22 @@ export default function CalendarPage() {
       snack: { hour: 15, minute: 0, label: "Snack" },
     };
     const mealPlans: MealPlan[] = mealsRes.status === "fulfilled" && Array.isArray(mealsRes.value) ? mealsRes.value : [];
+
+    // Build lookup: meal ID → food item names
+    const foodMap = new Map(foodItemsRef.current.map((f: FoodItem) => [f.id, f.name]));
+    const mealFoodMap = new Map(
+      savedMealsRef.current.map((m: Meal) => [
+        m.id,
+        m.food_item_ids.map((fid: string) => foodMap.get(fid)).filter(Boolean) as string[],
+      ])
+    );
+
     const mealEvents: CalendarEvent[] = mealPlans.map((mp) => {
       const time = mealTimeMap[mp.meal_type] || mealTimeMap.dinner;
       const startDate = new Date(`${mp.date}T00:00:00`);
       startDate.setHours(time.hour, time.minute, 0);
       const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // 30 min duration
+      const foodItems = mp.food_item_id ? mealFoodMap.get(mp.food_item_id) : undefined;
       return {
         id: `meal-${mp.id}`,
         title: `${time.label}: ${mp.food_name}`,
@@ -78,6 +100,7 @@ export default function CalendarPage() {
         notes: mp.notes || "",
         assignee_ids: mp.assignee_ids || [],
         source: "meal" as const,
+        meal_food_items: foodItems,
       };
     });
 
@@ -236,6 +259,7 @@ export default function CalendarPage() {
             members={members}
             onEdit={setEditingEvent}
             onDelete={handleDeleteEvent}
+            onMealClick={setMealDetailEvent}
             now={now}
             selectedDate={selectedDate}
           />
@@ -287,6 +311,79 @@ export default function CalendarPage() {
           onClose={() => setEditingEvent(null)}
         />
       )}
+      {mealDetailEvent && (
+        <MealDetailModal
+          event={mealDetailEvent}
+          members={members}
+          onClose={() => setMealDetailEvent(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Meal Detail Modal ──────────────────────────────────
+
+function MealDetailModal({
+  event,
+  members,
+  onClose,
+}: {
+  event: CalendarEvent;
+  members: FamilyMember[];
+  onClose: () => void;
+}) {
+  const assignedMembers = members.filter((m) => event.assignee_ids.includes(m.id));
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs text-gray-400 uppercase font-medium mb-0.5">
+              {format(new Date(event.start_time), "EEEE, MMM d · h:mm a")}
+            </p>
+            <h2 className="text-lg font-semibold text-gray-900">{event.title}</h2>
+            {assignedMembers.length > 0 && (
+              <div className="flex gap-1 mt-1.5 flex-wrap">
+                {assignedMembers.map((m) => (
+                  <span
+                    key={m.id}
+                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                    style={{ backgroundColor: m.color, color: "#374151" }}
+                  >
+                    {m.name}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 -mr-1 -mt-1 rounded-lg shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {event.meal_food_items && event.meal_food_items.length > 0 ? (
+          <div className="p-5">
+            <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Food items</p>
+            <ul className="space-y-1.5">
+              {event.meal_food_items.map((name) => (
+                <li key={name} className="flex items-center gap-2 text-gray-800">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                  {name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="p-5 text-sm text-gray-400">No food items listed for this meal.</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -519,6 +616,7 @@ function DayView({
   events,
   members,
   onEdit,
+  onMealClick,
   now,
   selectedDate,
 }: {
@@ -526,6 +624,7 @@ function DayView({
   members: FamilyMember[];
   onEdit: (e: CalendarEvent) => void;
   onDelete: (id: string) => void;
+  onMealClick: (e: CalendarEvent) => void;
   now: Date;
   selectedDate: Date;
 }) {
@@ -701,13 +800,14 @@ function DayView({
                   const pos = getEventPos(evt);
                   if (!pos) return null;
                   const isLocal = evt.source === "local" || !evt.source;
+                  const isMealEvt = evt.source === "meal";
                   const color = member.color;
                   const textColor = getMemberTextColor(color);
                   return (
                     <div key={evt.id}
-                      className={`absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 transition-opacity ${isLocal ? "cursor-pointer hover:opacity-80" : ""}`}
+                      className={`absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 transition-opacity ${isLocal || isMealEvt ? "cursor-pointer hover:opacity-80" : ""}`}
                       style={{ top: pos.top, height: pos.height, backgroundColor: color }}
-                      onClick={isLocal ? () => onEdit(evt) : undefined}
+                      onClick={isMealEvt ? () => onMealClick(evt) : isLocal ? () => onEdit(evt) : undefined}
                       title={`${evt.title} — ${format(new Date(evt.start_time), "h:mm a")}`}>
                       <p className="text-xs font-semibold leading-tight truncate" style={{ color: textColor }}>
                         {evt.source === "ical" && "🔗 "}

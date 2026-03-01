@@ -41,6 +41,7 @@ export interface CalendarEvent {
   assignee_ids: string[]; // member IDs
   source?: "local" | "ical" | "meal" | "family-ical";
   color?: string; // for family calendar events
+  meal_food_items?: string[]; // food item names for meal events
   created_at?: string;
 }
 
