@@ -68,7 +68,7 @@ export default function CalendarPage() {
       const time = mealTimeMap[mp.meal_type] || mealTimeMap.dinner;
       const startDate = new Date(`${mp.date}T00:00:00`);
       startDate.setHours(time.hour, time.minute, 0);
-      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour duration
+      const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // 30 min duration
       return {
         id: `meal-${mp.id}`,
         title: `${time.label}: ${mp.food_name}`,
