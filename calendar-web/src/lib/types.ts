@@ -84,6 +84,49 @@ export interface MealPlan {
   created_at?: string;
 }
 
+export interface Chore {
+  id: string;
+  family_id?: string;
+  name: string;
+  assignee_id: string;
+  frequency: string;   // daily | weekly | one-time
+  week_day?: number;
+  due_date?: string;
+  star_value: number;
+  active: number;
+  created_at?: string;
+}
+
+export interface ChoreCompletion {
+  id: string;
+  chore_id: string;
+  member_id: string;
+  date: string;
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  star_cost: number;
+  created_at?: string;
+}
+
+export interface RewardRedemption {
+  id: string;
+  reward_id: string;
+  member_id: string;
+  reward_name: string;
+  stars_spent: number;
+  date: string;
+}
+
+export interface MemberStarBalance {
+  member_id: string;
+  earned: number;
+  spent: number;
+  balance: number;
+}
+
 // Saturated colors for family calendars
 export const FAMILY_CALENDAR_COLORS = [
   "#6366F1", // indigo
