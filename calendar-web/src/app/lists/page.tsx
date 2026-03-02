@@ -602,11 +602,28 @@ function MealModal({
 
 // ── Shopping Tab ──────────────────────────────────────
 
+interface StoreComparisonItem {
+  shopping_item_name: string;
+  url: string;
+  price: number | null;
+  price_source: "fetched" | "manual" | "unavailable";
+}
+
+interface StoreResult {
+  store_name: string;
+  items: StoreComparisonItem[];
+  total: number;
+}
+
 function ShoppingTab() {
   const [items, setItems] = useState<GroceryItem[]>([]);
   const [newItem, setNewItem] = useState("");
   const [suggested, setSuggested] = useState<string[]>([]);
   const [addingAll, setAddingAll] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [storeComparison, setStoreComparison] = useState<StoreResult[] | null>(null);
+  const [unmatched, setUnmatched] = useState<string[]>([]);
+  const [expandedStore, setExpandedStore] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
     const res = await fetch("/api/grocery");
@@ -730,12 +747,112 @@ function ShoppingTab() {
     fetchItems();
   };
 
+  const fetchPrices = async () => {
+    setComparing(true);
+    setStoreComparison(null);
+    setUnmatched([]);
+
+    const foodRes = await fetch("/api/food-items");
+    if (!foodRes.ok) { setComparing(false); return; }
+    const foodItems: FoodItem[] = await foodRes.json();
+
+    const uncheckedItems = items.filter((i) => !i.checked);
+
+    // Match each unchecked shopping item to a food item
+    const matchedLinks: { link_id: string; url: string }[] = [];
+    const linkIdToMeta: Map<string, { store_name: string; url: string; manual_price: number | null }> = new Map();
+    const shoppingItemToLinks: Map<string, { link_id: string; store_name: string; url: string; manual_price: number | null }[]> = new Map();
+    const noMatchNames: string[] = [];
+
+    for (const si of uncheckedItems) {
+      const lower = si.name.toLowerCase().trim();
+      // exact match first, then substring
+      let food = foodItems.find((f) => f.name.toLowerCase().trim() === lower);
+      if (!food) food = foodItems.find((f) => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase().trim()));
+
+      if (!food || !food.links || food.links.length === 0) {
+        noMatchNames.push(si.name);
+        continue;
+      }
+
+      const linksForItem: { link_id: string; store_name: string; url: string; manual_price: number | null }[] = [];
+      for (const link of food.links) {
+        const manual_price = link.price != null ? Number(link.price) : null;
+        if (!linkIdToMeta.has(link.id)) {
+          linkIdToMeta.set(link.id, { store_name: link.store_name, url: link.url, manual_price });
+          matchedLinks.push({ link_id: link.id, url: link.url });
+        }
+        linksForItem.push({ link_id: link.id, store_name: link.store_name, url: link.url, manual_price });
+      }
+      shoppingItemToLinks.set(si.name, linksForItem);
+    }
+
+    setUnmatched(noMatchNames);
+
+    // Fetch prices for all unique links
+    let fetchedPrices: Map<string, number | null> = new Map();
+    if (matchedLinks.length > 0) {
+      const priceRes = await fetch("/api/price-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ links: matchedLinks }),
+      });
+      if (priceRes.ok) {
+        const { results }: { results: { link_id: string; price: number | null }[] } = await priceRes.json();
+        for (const r of results) fetchedPrices.set(r.link_id, r.price);
+      }
+    }
+
+    // Build store map
+    const storeMap: Map<string, { items: StoreComparisonItem[]; total: number }> = new Map();
+
+    for (const [itemName, links] of shoppingItemToLinks) {
+      for (const link of links) {
+        if (!storeMap.has(link.store_name)) storeMap.set(link.store_name, { items: [], total: 0 });
+        const store = storeMap.get(link.store_name)!;
+
+        const rawFetched = fetchedPrices.get(link.link_id);
+        const fetched = rawFetched != null ? Number(rawFetched) : null;
+        let price: number | null;
+        let price_source: "fetched" | "manual" | "unavailable";
+        if (fetched !== null && !isNaN(fetched) && fetched > 0) {
+          price = fetched;
+          price_source = "fetched";
+        } else if (link.manual_price !== null && link.manual_price > 0) {
+          price = link.manual_price;
+          price_source = "manual";
+        } else {
+          price = null;
+          price_source = "unavailable";
+        }
+
+        store.items.push({ shopping_item_name: itemName, url: link.url, price, price_source });
+        if (price !== null) store.total += price;
+      }
+    }
+
+    // Sort stores cheapest first
+    const sorted: StoreResult[] = Array.from(storeMap.entries())
+      .map(([store_name, data]) => ({ store_name, ...data }))
+      .sort((a, b) => a.total - b.total);
+
+    setStoreComparison(sorted);
+    setComparing(false);
+  };
+
   const unchecked = items.filter((i) => !i.checked);
   const checked = items.filter((i) => i.checked);
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={fetchPrices}
+          disabled={comparing || unchecked.length === 0}
+          className="px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded-full hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+        >
+          {comparing ? "Fetching prices…" : "Fetch Prices"}
+        </button>
         {checked.length > 0 && (
           <button
             onClick={clearChecked}
@@ -783,6 +900,93 @@ function ShoppingTab() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Store price comparison panel */}
+      {storeComparison !== null && (
+        <div className="bg-white rounded-2xl border border-gray-200">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-900">Price Comparison</h2>
+            <button
+              onClick={() => setStoreComparison(null)}
+              className="text-gray-400 hover:text-gray-600 p-1"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {storeComparison.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-gray-500">No store links found for any unchecked items.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {storeComparison.map((store, idx) => (
+                <div key={store.store_name}>
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                    onClick={() => setExpandedStore(expandedStore === store.store_name ? null : store.store_name)}
+                  >
+                    {idx === 0 && (
+                      <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full shrink-0">
+                        Cheapest
+                      </span>
+                    )}
+                    <span className="font-semibold text-gray-900 flex-1">{store.store_name}</span>
+                    <span className="text-sm text-gray-400">
+                      {store.items.length} of {unchecked.length} items
+                    </span>
+                    <span className="font-bold text-gray-900 ml-2">
+                      ${store.total.toFixed(2)}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${expandedStore === store.store_name ? "rotate-180" : ""}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expandedStore === store.store_name && (
+                    <div className="px-4 pb-3 space-y-1">
+                      {store.items.map((si) => (
+                        <div key={si.shopping_item_name} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                          <a
+                            href={si.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 text-sm text-indigo-600 hover:text-indigo-800 truncate min-w-0"
+                          >
+                            {si.shopping_item_name}
+                          </a>
+                          {si.price !== null ? (
+                            <span className="text-sm font-semibold text-gray-800 shrink-0">
+                              ${si.price.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-400 shrink-0">–</span>
+                          )}
+                          {si.price_source === "fetched" && (
+                            <span className="text-xs font-medium text-green-600 shrink-0">live</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {unmatched.length > 0 && (
+            <div className="bg-gray-50 rounded-b-2xl px-4 py-2.5 border-t border-gray-100">
+              <p className="text-xs text-gray-500">
+                <span className="font-medium">No store links:</span>{" "}
+                {unmatched.join(", ")}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
