@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { FamilyMember, FamilyCalendar, Photo, getMemberTextColor } from "@/lib/types";
 import ColorPicker from "@/components/ColorPicker";
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [newMember, setNewMember] = useState("");
   const [adding, setAdding] = useState(false);
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>({});
@@ -61,7 +63,16 @@ export default function SettingsPage() {
     if (res.ok) setGoogleStatus(await res.json());
   };
 
-  useEffect(() => { fetchMembers(); fetchFamilyCalendars(); fetchPhotos(); fetchGoogleStatus(); }, []);
+  useEffect(() => {
+    fetchMembers();
+    fetchFamilyCalendars();
+    fetchPhotos();
+    fetchGoogleStatus();
+    fetch("/api/auth/me")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => d?.role && setSessionRole(d.role))
+      .catch(() => null);
+  }, []);
 
   const handleAdd = async () => {
     const name = newMember.trim();
@@ -638,6 +649,28 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+
+        {/* Admin */}
+        {sessionRole === "admin" && (
+          <section className="bg-white rounded-2xl border border-indigo-100 p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-lg font-semibold text-gray-900">Admin</h2>
+              <span className="text-xs font-semibold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                Admin
+              </span>
+            </div>
+            <p className="text-sm text-gray-400 mb-4">Manage all users and families.</p>
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-600 transition-colors"
+            >
+              Open Admin Panel
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </section>
+        )}
 
         {/* About */}
         <section className="bg-white rounded-2xl border border-gray-100 p-5">

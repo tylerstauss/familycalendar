@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     sql`INSERT INTO users (id, family_id, email, password_hash, name) VALUES (${userId}, ${familyId}, ${normalizedEmail}, ${passwordHash}, ${name.trim()})`,
   ]);
 
-  const token = await signSession({ userId, familyId, email: normalizedEmail, name: name.trim() });
+  const token = await signSession({ userId, familyId, email: normalizedEmail, name: name.trim(), role: "member" });
   const res = NextResponse.json(
     { user: { id: userId, name: name.trim(), email: normalizedEmail, familyId } },
     { status: 201 }

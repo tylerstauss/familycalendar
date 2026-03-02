@@ -9,6 +9,7 @@ interface UserRow {
   email: string;
   password_hash: string;
   name: string;
+  role: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     familyId: user.family_id,
     email: user.email,
     name: user.name,
+    role: user.role ?? "member",
   });
 
   const res = NextResponse.json({

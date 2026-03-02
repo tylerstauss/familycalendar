@@ -6,6 +6,7 @@ export interface SessionPayload {
   familyId: string;
   email: string;
   name: string;
+  role: string;
 }
 
 if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET env var is not set");
@@ -42,6 +43,18 @@ export async function requireAuth(
     return { ok: false, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
   return { ok: true, session };
+}
+
+// For API route handlers — returns session or a 403 NextResponse if not admin
+export async function requireAdmin(
+  req: NextRequest
+): Promise<{ ok: true; session: SessionPayload } | { ok: false; error: NextResponse }> {
+  const auth = await requireAuth(req);
+  if (!auth.ok) return auth;
+  if (auth.session.role !== "admin") {
+    return { ok: false, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return auth;
 }
 
 // Sets session cookie on a response
