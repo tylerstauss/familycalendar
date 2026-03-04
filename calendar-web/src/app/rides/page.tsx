@@ -111,6 +111,11 @@ export default function RidesPage() {
     if (!modal || !selectedDriver) return;
     setSaving(true);
     const suggestion = suggestions.find((s) => s.memberId === selectedDriver);
+    // For iCal events assignee_ids may be [] (show for all) — include all kids in that case
+    const assignees = modal.event.assignee_ids || [];
+    const passengerIds = kids
+      .filter((k) => assignees.length === 0 || assignees.includes(k.id))
+      .map((k) => k.id);
     await fetch("/api/ride-plans", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -118,10 +123,15 @@ export default function RidesPage() {
         event_id: modal.event.id,
         plan_type: modal.planType,
         driver_id: selectedDriver,
-        passengers: kids.filter((k) => (modal.event.assignee_ids || []).includes(k.id)).map((k) => k.id),
+        passengers: passengerIds,
         drive_mins: suggestion?.drive_mins ?? null,
         drive_km: suggestion?.drive_km ?? null,
         notes: modalNotes,
+        // Context for creating the driver calendar event
+        event_title: modal.event.title,
+        event_start_time: modal.event.start_time,
+        event_end_time: modal.event.end_time,
+        event_location: modal.event.location,
       }),
     });
     setSaving(false);

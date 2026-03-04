@@ -207,17 +207,22 @@ async function setup() {
 
   await sql`
     CREATE TABLE IF NOT EXISTS ride_plans (
-      id          TEXT PRIMARY KEY,
-      family_id   TEXT NOT NULL DEFAULT '',
-      event_id    TEXT NOT NULL,
-      plan_type   TEXT NOT NULL,
-      driver_id   TEXT NOT NULL,
-      passengers  TEXT NOT NULL DEFAULT '[]',
-      drive_mins  INTEGER,
-      drive_km    REAL,
-      notes       TEXT DEFAULT '',
-      created_at  TEXT DEFAULT (NOW()::TEXT)
+      id               TEXT PRIMARY KEY,
+      family_id        TEXT NOT NULL DEFAULT '',
+      event_id         TEXT NOT NULL,
+      plan_type        TEXT NOT NULL,
+      driver_id        TEXT NOT NULL,
+      passengers       TEXT NOT NULL DEFAULT '[]',
+      drive_mins       INTEGER,
+      drive_km         REAL,
+      notes            TEXT DEFAULT '',
+      driver_event_id  TEXT DEFAULT '',
+      created_at       TEXT DEFAULT (NOW()::TEXT)
     )
+  `;
+
+  await sql`
+    ALTER TABLE ride_plans ADD COLUMN IF NOT EXISTS driver_event_id TEXT DEFAULT ''
   `;
 
   console.log("All tables created successfully.");

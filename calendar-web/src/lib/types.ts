@@ -33,6 +33,7 @@ export interface RidePlan {
   drive_mins: number | null;
   drive_km: number | null;
   notes: string;
+  driver_event_id?: string;
 }
 
 export interface DriverSuggestion {
