@@ -25,7 +25,7 @@ export default function RidesPage() {
   const fetchAll = useCallback(async () => {
     const now = new Date();
     const start = now.toISOString().slice(0, 10);
-    const end = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const end = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     const [membersRes, eventsRes, icalRes, plansRes] = await Promise.all([
       fetch("/api/members"),
@@ -38,7 +38,17 @@ export default function RidesPage() {
 
     const localEvents: CalendarEvent[] = eventsRes.ok ? await eventsRes.json() : [];
     const icalEvents: CalendarEvent[] = icalRes.ok ? await icalRes.json() : [];
-    setEvents([...localEvents, ...icalEvents]);
+
+    // Driver event titles from local DB — used to also filter the iCal-synced copies
+    // (iCal description/notes may not reliably survive Google Calendar round-trip)
+    const driverTitles = new Set(
+      localEvents.filter((e) => (e.notes || "").includes("__ride_driver__")).map((e) => e.title)
+    );
+
+    setEvents([
+      ...localEvents,
+      ...icalEvents.filter((e) => !driverTitles.has(e.title)),
+    ]);
 
     if (plansRes.ok) setRidePlans(await plansRes.json());
   }, []);
