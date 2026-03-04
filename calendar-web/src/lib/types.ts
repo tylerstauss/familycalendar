@@ -19,7 +19,28 @@ export interface FamilyMember {
   color: string;
   ical_url?: string;
   hidden?: boolean;
+  member_type?: 'adult' | 'kid';
+  home_address?: string;
   created_at?: string;
+}
+
+export interface RidePlan {
+  id: string;
+  event_id: string;
+  plan_type: 'dropoff' | 'pickup';
+  driver_id: string;
+  passengers: string[];
+  drive_mins: number | null;
+  drive_km: number | null;
+  notes: string;
+}
+
+export interface DriverSuggestion {
+  memberId: string;
+  name: string;
+  home_address: string;
+  drive_mins: number | null;
+  drive_km: number | null;
 }
 
 export interface FamilyCalendar {

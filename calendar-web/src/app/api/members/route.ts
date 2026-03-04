@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest) {
   if (!auth.ok) return auth.error;
   const { familyId } = auth.session;
 
-  const { id, ical_url, hidden, color } = await req.json();
+  const { id, ical_url, hidden, color, member_type, home_address } = await req.json();
   if (!id) {
     return NextResponse.json({ error: "Member id is required" }, { status: 400 });
   }
@@ -73,6 +73,21 @@ export async function PUT(req: NextRequest) {
     }
     await sql`
       UPDATE family_members SET ical_url = ${url} WHERE id = ${id} AND family_id = ${familyId}
+    `;
+  }
+
+  if (member_type !== undefined) {
+    if (member_type !== 'adult' && member_type !== 'kid') {
+      return NextResponse.json({ error: "member_type must be 'adult' or 'kid'" }, { status: 400 });
+    }
+    await sql`
+      UPDATE family_members SET member_type = ${member_type} WHERE id = ${id} AND family_id = ${familyId}
+    `;
+  }
+
+  if (home_address !== undefined) {
+    await sql`
+      UPDATE family_members SET home_address = ${(home_address || "").trim()} WHERE id = ${id} AND family_id = ${familyId}
     `;
   }
 

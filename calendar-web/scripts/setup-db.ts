@@ -197,6 +197,29 @@ async function setup() {
     )
   `;
 
+  await sql`
+    ALTER TABLE family_members ADD COLUMN IF NOT EXISTS member_type TEXT NOT NULL DEFAULT 'adult'
+  `;
+
+  await sql`
+    ALTER TABLE family_members ADD COLUMN IF NOT EXISTS home_address TEXT NOT NULL DEFAULT ''
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS ride_plans (
+      id          TEXT PRIMARY KEY,
+      family_id   TEXT NOT NULL DEFAULT '',
+      event_id    TEXT NOT NULL,
+      plan_type   TEXT NOT NULL,
+      driver_id   TEXT NOT NULL,
+      passengers  TEXT NOT NULL DEFAULT '[]',
+      drive_mins  INTEGER,
+      drive_km    REAL,
+      notes       TEXT DEFAULT '',
+      created_at  TEXT DEFAULT (NOW()::TEXT)
+    )
+  `;
+
   console.log("All tables created successfully.");
 }
 

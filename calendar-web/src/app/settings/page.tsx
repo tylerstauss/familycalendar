@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FamilyMember, FamilyCalendar, Photo, getMemberTextColor } from "@/lib/types";
 import ColorPicker from "@/components/ColorPicker";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [sessionRole, setSessionRole] = useState<string | null>(null);
   const [newMember, setNewMember] = useState("");
@@ -13,6 +15,10 @@ export default function SettingsPage() {
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>({});
   const [icalSaved, setIcalSaved] = useState<Record<string, boolean>>({});
   const [icalSaving, setIcalSaving] = useState<Record<string, boolean>>({});
+  const [memberTypes, setMemberTypes] = useState<Record<string, 'adult' | 'kid'>>({});
+  const [homeAddresses, setHomeAddresses] = useState<Record<string, string>>({});
+  const [homeAddressSaved, setHomeAddressSaved] = useState<Record<string, boolean>>({});
+  const [homeAddressSaving, setHomeAddressSaving] = useState<Record<string, boolean>>({});
 
   // Family calendars state
   const [familyCalendars, setFamilyCalendars] = useState<FamilyCalendar[]>([]);
@@ -39,8 +45,16 @@ export default function SettingsPage() {
     const data: FamilyMember[] = await res.json();
     setMembers(data);
     const urls: Record<string, string> = {};
-    for (const m of data) urls[m.id] = m.ical_url || "";
+    const types: Record<string, 'adult' | 'kid'> = {};
+    const addresses: Record<string, string> = {};
+    for (const m of data) {
+      urls[m.id] = m.ical_url || "";
+      types[m.id] = m.member_type || 'adult';
+      addresses[m.id] = m.home_address || "";
+    }
     setIcalUrls(urls);
+    setMemberTypes(types);
+    setHomeAddresses(addresses);
   };
 
   const fetchFamilyCalendars = async () => {
@@ -126,6 +140,35 @@ export default function SettingsPage() {
     return (icalUrls[memberId] || "") !== (member?.ical_url || "");
   };
 
+  const handleChangeType = async (memberId: string, type: 'adult' | 'kid') => {
+    setMemberTypes((prev) => ({ ...prev, [memberId]: type }));
+    await fetch("/api/members", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: memberId, member_type: type }),
+    });
+  };
+
+  const handleSaveHomeAddress = async (memberId: string) => {
+    setHomeAddressSaving((prev) => ({ ...prev, [memberId]: true }));
+    const res = await fetch("/api/members", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: memberId, home_address: homeAddresses[memberId] || "" }),
+    });
+    setHomeAddressSaving((prev) => ({ ...prev, [memberId]: false }));
+    if (res.ok) {
+      setHomeAddressSaved((prev) => ({ ...prev, [memberId]: true }));
+      fetchMembers();
+      setTimeout(() => setHomeAddressSaved((prev) => ({ ...prev, [memberId]: false })), 2000);
+    }
+  };
+
+  const isHomeAddressDirty = (memberId: string) => {
+    const member = members.find((m) => m.id === memberId);
+    return (homeAddresses[memberId] || "") !== (member?.home_address || "");
+  };
+
   const handleAddFamilyCalendar = async () => {
     const name = newCalName.trim();
     if (!name) return;
@@ -191,6 +234,11 @@ export default function SettingsPage() {
       body: JSON.stringify({ id, hidden: !currentlyHidden }),
     });
     fetchFamilyCalendars();
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
   };
 
   const handleGoogleDisconnect = async () => {
@@ -280,6 +328,53 @@ export default function SettingsPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
+                    </div>
+                    {/* Adult/Kid toggle + home address */}
+                    <div className="px-3 pb-3 pt-2 border-t border-black/5 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 mr-1">Role</span>
+                        <button
+                          onClick={() => handleChangeType(m.id, 'adult')}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            (memberTypes[m.id] || 'adult') === 'adult'
+                              ? 'bg-indigo-500 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          Adult
+                        </button>
+                        <button
+                          onClick={() => handleChangeType(m.id, 'kid')}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            memberTypes[m.id] === 'kid'
+                              ? 'bg-indigo-500 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          Kid
+                        </button>
+                      </div>
+                      {(memberTypes[m.id] || 'adult') === 'adult' && (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={homeAddresses[m.id] || ""}
+                            onChange={(e) => {
+                              setHomeAddresses((prev) => ({ ...prev, [m.id]: e.target.value }));
+                              setHomeAddressSaved((prev) => ({ ...prev, [m.id]: false }));
+                            }}
+                            className="flex-1 px-3 py-1.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-gray-900 text-xs"
+                            placeholder="Home address for drive-time estimates"
+                          />
+                          <button
+                            onClick={() => handleSaveHomeAddress(m.id)}
+                            disabled={!isHomeAddressDirty(m.id) || homeAddressSaving[m.id]}
+                            className="px-3 py-1.5 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 font-medium disabled:opacity-50 text-xs whitespace-nowrap"
+                          >
+                            {homeAddressSaving[m.id] ? "Saving..." : homeAddressSaved[m.id] ? "Saved!" : "Save"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -679,6 +774,21 @@ export default function SettingsPage() {
             Family Calendar &mdash; a Skylight-inspired calendar for your family.
             Data is stored locally on this device.
           </p>
+        </section>
+
+        {/* Sign out */}
+        <section className="bg-white rounded-2xl border border-gray-100 p-5">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Account</h2>
+          <p className="text-sm text-gray-400 mb-4">Sign out of your account on this device.</p>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-500 border border-red-200 rounded-xl hover:bg-red-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+            </svg>
+            Sign out
+          </button>
         </section>
       </div>
     </div>

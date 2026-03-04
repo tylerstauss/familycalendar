@@ -8,8 +8,9 @@ const tabs = [
   { href: "/", label: "Calendar", icon: CalendarIcon },
   { href: "/meals", label: "Meals", icon: MealsIcon },
   { href: "/lists", label: "Lists", icon: GroceryIcon },
-  { href: "/photos", label: "Photos", icon: PhotosIcon },
   { href: "/chores", label: "Chores", icon: ChoresIcon },
+  { href: "/rides", label: "Rides", icon: RidesIcon },
+  { href: "/photos", label: "Photos", icon: PhotosIcon, mobileHidden: true },
 ];
 
 interface SessionUser {
@@ -88,7 +89,7 @@ export default function Nav() {
       {/* Mobile: bottom nav bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-2 py-1 z-40 safe-bottom">
         <div className="max-w-lg mx-auto flex justify-around items-center">
-          {tabs.map((tab) => {
+          {tabs.filter((t) => !t.mobileHidden).map((tab) => {
             const active = pathname === tab.href;
             return (
               <Link
@@ -106,13 +107,17 @@ export default function Nav() {
             );
           })}
           {user && (
-            <button
-              onClick={handleLogout}
-              className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            <Link
+              href="/settings"
+              className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                pathname === "/settings"
+                  ? "text-indigo-600"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
             >
-              <LogoutIcon />
-              Log out
-            </button>
+              <ProfileIcon active={pathname === "/settings"} initial={user.name.charAt(0).toUpperCase()} />
+              Profile
+            </Link>
           )}
         </div>
       </nav>
@@ -169,10 +174,20 @@ function ChoresIcon({ active }: { active: boolean }) {
   );
 }
 
-function LogoutIcon() {
+function RidesIcon({ active }: { active: boolean }) {
   return (
-    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={active ? 2.5 : 2} viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
     </svg>
+  );
+}
+
+function ProfileIcon({ active, initial }: { active: boolean; initial: string }) {
+  return (
+    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+      active ? "bg-indigo-500 text-white" : "bg-gray-200 text-gray-600"
+    }`}>
+      {initial}
+    </div>
   );
 }
