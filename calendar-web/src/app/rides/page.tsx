@@ -84,11 +84,27 @@ export default function RidesPage() {
       const res = await fetch("/api/ride-plans/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ event_location: event.location, adult_member_ids: adultIds }),
+        body: JSON.stringify({
+          event_location: event.location,
+          adult_member_ids: adultIds,
+          event_start_time: event.start_time,
+          event_end_time: event.end_time,
+          plan_type: planType,
+          event_id: event.id,
+        }),
       });
       if (res.ok) setSuggestions(await res.json());
     } catch {}
     setSuggestionsLoading(false);
+  }
+
+  function formatLeaveBy(iso: string): string {
+    return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+
+  function calcLeaveBy(eventTime: string, drive_mins: number): string {
+    const ms = new Date(eventTime).getTime() - (drive_mins + 5) * 60 * 1000;
+    return new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   }
 
   async function savePlan() {
@@ -196,7 +212,7 @@ export default function RidesPage() {
                             {type === "dropoff" ? "Drop-off" : "Pick-up"}
                           </span>
                           {plan && driver ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <div
                                 className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
                                 style={{ backgroundColor: driver.color, color: getMemberTextColor(driver.color) }}
@@ -206,7 +222,10 @@ export default function RidesPage() {
                               <span className="text-sm text-gray-800 font-medium">{driver.name}</span>
                               {plan.drive_mins !== null && (
                                 <span className="text-xs bg-green-50 text-green-600 font-medium px-2 py-0.5 rounded-full">
-                                  ~{plan.drive_mins} min
+                                  Leave by {calcLeaveBy(
+                                    type === "dropoff" ? event.start_time : event.end_time,
+                                    plan.drive_mins
+                                  )}
                                 </span>
                               )}
                             </div>
@@ -271,7 +290,8 @@ export default function RidesPage() {
               <div className="space-y-2 mb-4">
                 {suggestions.map((s, idx) => {
                   const member = getMember(s.memberId);
-                  const isFirst = idx === 0 && s.drive_mins !== null;
+                  // "Best" = first available driver that has a drive time
+                  const isBest = idx === 0 && s.available && s.drive_mins !== null;
                   const isSelected = selectedDriver === s.memberId;
                   return (
                     <button
@@ -280,7 +300,9 @@ export default function RidesPage() {
                       className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-colors text-left ${
                         isSelected
                           ? "border-indigo-500 bg-indigo-50"
-                          : "border-gray-100 hover:border-gray-200 bg-white"
+                          : s.available
+                            ? "border-gray-100 hover:border-gray-200 bg-white"
+                            : "border-gray-100 bg-gray-50 opacity-70"
                       }`}
                     >
                       {member && (
@@ -292,21 +314,30 @@ export default function RidesPage() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-900 text-sm">{s.name}</p>
-                        {s.home_address ? (
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-medium text-gray-900 text-sm">{s.name}</p>
+                          {!s.available && (
+                            <span className="text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                              Busy
+                            </span>
+                          )}
+                        </div>
+                        {s.leave_by ? (
+                          <p className="text-xs text-indigo-500 font-medium">Leave by {formatLeaveBy(s.leave_by)}</p>
+                        ) : s.home_address ? (
                           <p className="text-xs text-gray-400 truncate">{s.home_address}</p>
                         ) : (
                           <p className="text-xs text-gray-300">No address</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {isFirst && (
+                        {isBest && (
                           <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                            Closest
+                            Best
                           </span>
                         )}
                         {s.drive_mins !== null ? (
-                          <span className="text-xs font-medium text-gray-500">~{s.drive_mins} min</span>
+                          <span className="text-xs font-medium text-gray-400">{s.drive_mins} min away</span>
                         ) : (
                           <span className="text-xs text-gray-300">—</span>
                         )}

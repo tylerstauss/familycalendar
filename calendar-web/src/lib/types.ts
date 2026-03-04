@@ -41,6 +41,8 @@ export interface DriverSuggestion {
   home_address: string;
   drive_mins: number | null;
   drive_km: number | null;
+  available: boolean;
+  leave_by: string | null;  // ISO string — formatted by client
 }
 
 export interface FamilyCalendar {
