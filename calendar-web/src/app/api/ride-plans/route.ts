@@ -43,10 +43,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "plan_type must be 'dropoff' or 'pickup'" }, { status: 400 });
   }
 
-  // Verify event belongs to family
-  const [event] = await sql`SELECT id FROM events WHERE id = ${event_id} AND family_id = ${familyId}`;
-  if (!event) {
-    return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  // Verify event belongs to family (skip check for iCal-sourced event IDs)
+  const isIcalEvent = event_id.startsWith("ical-") || event_id.startsWith("family-ical-");
+  if (!isIcalEvent) {
+    const [event] = await sql`SELECT id FROM events WHERE id = ${event_id} AND family_id = ${familyId}`;
+    if (!event) {
+      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
   }
 
   // Verify driver belongs to family

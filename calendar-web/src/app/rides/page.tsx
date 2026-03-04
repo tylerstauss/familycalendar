@@ -27,17 +27,19 @@ export default function RidesPage() {
     const start = now.toISOString().slice(0, 10);
     const end = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const [membersRes, eventsRes, plansRes] = await Promise.all([
+    const [membersRes, eventsRes, icalRes, plansRes] = await Promise.all([
       fetch("/api/members"),
       fetch(`/api/events?start=${start}&end=${end}`),
+      fetch(`/api/ical?start=${start}&end=${end}`),
       fetch("/api/ride-plans"),
     ]);
 
     if (membersRes.ok) setMembers(await membersRes.json());
-    if (eventsRes.ok) {
-      const data: CalendarEvent[] = await eventsRes.json();
-      setEvents(data);
-    }
+
+    const localEvents: CalendarEvent[] = eventsRes.ok ? await eventsRes.json() : [];
+    const icalEvents: CalendarEvent[] = icalRes.ok ? await icalRes.json() : [];
+    setEvents([...localEvents, ...icalEvents]);
+
     if (plansRes.ok) setRidePlans(await plansRes.json());
   }, []);
 
@@ -48,12 +50,18 @@ export default function RidesPage() {
   const kids = members.filter((m) => m.member_type === "kid");
   const adults = members.filter((m) => m.member_type !== "kid");
 
-  // Events that have a location AND have at least one kid assigned
+  // Events that have a location AND involve kids
   const rideEvents = events.filter((e) => {
     if (!e.location?.trim()) return false;
-    if (e.source && e.source !== "local") return false;
+    if (e.source === "meal") return false;
     const kidIds = new Set(kids.map((k) => k.id));
-    return (e.assignee_ids || []).some((id) => kidIds.has(id));
+    const assignees = e.assignee_ids || [];
+    // For iCal events: if no names matched (assignees empty = show for all), include it
+    // For local events: must have at least one kid assigned
+    if (e.source === "ical" || e.source === "family-ical") {
+      return assignees.length === 0 || assignees.some((id) => kidIds.has(id));
+    }
+    return assignees.some((id) => kidIds.has(id));
   });
 
   function getMember(id: string) {
