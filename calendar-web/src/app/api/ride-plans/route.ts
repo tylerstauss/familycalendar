@@ -48,7 +48,6 @@ export async function POST(req: NextRequest) {
 
   const {
     event_id, plan_type, driver_id, passengers, drive_mins, drive_km, notes,
-    // Extra context for creating the driver calendar event
     event_title, event_start_time, event_end_time, event_location,
   } = await req.json();
 
@@ -88,10 +87,9 @@ export async function POST(req: NextRequest) {
   let driverEventId = "";
 
   if (event_start_time && event_end_time) {
-    // Use drive_mins if available; fall back to 20-min estimate
     const effectiveMins = typeof drive_mins === "number" && drive_mins > 0 ? drive_mins : 20;
 
-    // Dropoff: leave before start, return after drop; Pickup: leave before end, return after pickup
+    // Both dropoff and pickup: leave before the anchor time, return after driving back
     const anchorMs = plan_type === "pickup"
       ? new Date(event_end_time).getTime()
       : new Date(event_start_time).getTime();
