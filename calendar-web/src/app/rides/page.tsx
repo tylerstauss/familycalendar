@@ -54,6 +54,7 @@ export default function RidesPage() {
   const rideEvents = events.filter((e) => {
     if (!e.location?.trim()) return false;
     if (e.source === "meal") return false;
+    if ((e.notes || "").includes("__ride_driver__")) return false;
     const kidIds = new Set(kids.map((k) => k.id));
     const assignees = e.assignee_ids || [];
     // For iCal events: if no names matched (assignees empty = show for all), include it

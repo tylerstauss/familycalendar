@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
         ${new Date(leaveMs).toISOString()},
         ${new Date(returnMs).toISOString()},
         ${event_location || ""},
-        ${""},
+        ${"__ride_driver__"},
         ${JSON.stringify([driver_id])},
         ${""}
       )
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       start_time: new Date(leaveMs).toISOString(),
       end_time: new Date(returnMs).toISOString(),
       location: event_location || "",
-      notes: "",
+      notes: "__ride_driver__",
       assignee_ids: [driver_id],
     };
     const googleId = await createGoogleEvent(familyId, driverCalEvent).catch(() => null);
