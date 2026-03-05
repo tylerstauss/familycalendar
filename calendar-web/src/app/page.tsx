@@ -847,6 +847,13 @@ function DayView({
   };
 
   const familyEvents = events.filter((e) => e.assignee_ids.length === 0);
+  // Build set of driver event titles so iCal-synced copies can be identified even
+  // when the __ride_driver__ notes marker is stripped by Google Calendar.
+  const driverTitles = new Set(
+    events.filter((e) => (e.notes || "").includes("__ride_driver__")).map((e) => e.title)
+  );
+  const isDriverEvent = (e: CalendarEvent) =>
+    (e.notes || "").includes("__ride_driver__") || driverTitles.has(e.title);
 
   return (
     <div className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden bg-white">
@@ -921,7 +928,10 @@ function DayView({
         {/* Columns */}
         <div className="flex flex-1">
           {members.map((member, colIdx) => {
-            const memberEvents = events.filter((e) => e.assignee_ids.includes(member.id));
+            const isKid = member.member_type === "kid";
+            const memberEvents = events.filter((e) =>
+              e.assignee_ids.includes(member.id) && !(isKid && isDriverEvent(e))
+            );
             const colEvents = [...familyEvents, ...memberEvents];
             return (
               <div key={member.id}
