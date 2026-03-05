@@ -46,7 +46,11 @@ export default function CalendarPage() {
 
     let params: string;
     if (viewMode === "day") {
-      params = `start=${dateStr}&end=${dateStr}`;
+      // Extend end by 1 day so events that start in the evening local time but
+      // land on the next UTC date (e.g. 4:35 PM PST = 00:35 UTC next day) are included.
+      // getEventPos filters them to the correct visible range client-side.
+      const nextDayStr = format(addDays(selectedDate, 1), "yyyy-MM-dd");
+      params = `start=${dateStr}&end=${nextDayStr}`;
     } else if (viewMode === "week") {
       const ws = startOfWeek(selectedDate, { weekStartsOn: 0 });
       const we = endOfWeek(selectedDate, { weekStartsOn: 0 });
@@ -69,8 +73,15 @@ export default function CalendarPage() {
     // Filter driver events from iCal results — the local version already has the correct
     // assignee (driver only). The iCal-synced copy matches kid names via assigneesFromTitle
     // and would incorrectly show in the kids' columns.
+    // Also filter by title as a fallback since Google Calendar may not preserve the
+    // __ride_driver__ description through the iCal round-trip.
+    const driverTitles = new Set(
+      localEvents
+        .filter((e) => (e.notes || "").includes("__ride_driver__"))
+        .map((e) => e.title)
+    );
     const icalEvents: CalendarEvent[] = (icalRes.status === "fulfilled" && Array.isArray(icalRes.value) ? icalRes.value : [])
-      .filter((e: CalendarEvent) => !e.notes?.includes("__ride_driver__"));
+      .filter((e: CalendarEvent) => !e.notes?.includes("__ride_driver__") && !driverTitles.has(e.title));
 
     // Convert meal plans to calendar events
     const mealTimeMap: Record<string, { hour: number; minute: number; label: string }> = {
