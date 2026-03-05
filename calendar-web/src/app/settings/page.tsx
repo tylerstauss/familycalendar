@@ -35,6 +35,11 @@ export default function SettingsPage() {
   // Google Calendar sync state
   const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; calendarName?: string } | null>(null);
 
+  // Apple Calendar / iCal export state
+  const [icalExportUrl, setIcalExportUrl] = useState<string | null>(null);
+  const [icalCopied, setIcalCopied] = useState(false);
+  const [icalRevoking, setIcalRevoking] = useState(false);
+
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -77,11 +82,39 @@ export default function SettingsPage() {
     if (res.ok) setGoogleStatus(await res.json());
   };
 
+  const fetchIcalExportUrl = async () => {
+    const res = await fetch("/api/export/ical-token");
+    if (res.ok) {
+      const { token } = await res.json();
+      setIcalExportUrl(`${window.location.origin}/api/export/ical/${token}`);
+    }
+  };
+
+  const handleIcalCopy = async () => {
+    if (!icalExportUrl) return;
+    await navigator.clipboard.writeText(icalExportUrl);
+    setIcalCopied(true);
+    setTimeout(() => setIcalCopied(false), 2000);
+  };
+
+  const handleIcalRevoke = async () => {
+    if (!confirm("Revoke this URL? Anyone subscribed with the old URL will stop receiving updates.")) return;
+    setIcalRevoking(true);
+    const res = await fetch("/api/export/ical-token", { method: "DELETE" });
+    if (res.ok) {
+      const { token } = await res.json();
+      setIcalExportUrl(`${window.location.origin}/api/export/ical/${token}`);
+      setIcalCopied(false);
+    }
+    setIcalRevoking(false);
+  };
+
   useEffect(() => {
     fetchMembers();
     fetchFamilyCalendars();
     fetchPhotos();
     fetchGoogleStatus();
+    fetchIcalExportUrl();
     fetch("/api/auth/me")
       .then((r) => r.ok ? r.json() : null)
       .then((d) => d?.role && setSessionRole(d.role))
@@ -506,6 +539,45 @@ export default function SettingsPage() {
               </svg>
               Connect Google Calendar
             </a>
+          )}
+        </section>
+
+        {/* Apple Calendar / iCal Subscription */}
+        <section className="bg-white rounded-2xl border border-gray-100 p-5">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Apple Calendar Subscription</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Subscribe to your family calendar in Apple Calendar, Outlook, or any app that supports iCal feeds.
+          </p>
+          {icalExportUrl === null ? (
+            <div className="h-10 bg-gray-100 rounded-xl animate-pulse w-48" />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={icalExportUrl}
+                  className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-gray-600 font-mono truncate select-all"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  onClick={handleIcalCopy}
+                  className="flex-shrink-0 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  {icalCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">
+                In Apple Calendar: File → New Calendar Subscription → paste URL.
+                Updates sync automatically when you refresh.
+              </p>
+              <button
+                onClick={handleIcalRevoke}
+                disabled={icalRevoking}
+                className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors disabled:opacity-50"
+              >
+                {icalRevoking ? "Revoking…" : "Revoke & regenerate URL"}
+              </button>
+            </div>
           )}
         </section>
 
