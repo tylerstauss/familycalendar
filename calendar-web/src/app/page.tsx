@@ -853,7 +853,9 @@ function DayView({
     events.filter((e) => (e.notes || "").includes("__ride_driver__")).map((e) => e.title)
   );
   const isDriverEvent = (e: CalendarEvent) =>
-    (e.notes || "").includes("__ride_driver__") || driverTitles.has(e.title);
+    (e.notes || "").includes("__ride_driver__") ||
+    driverTitles.has(e.title) ||
+    /^(Drop off|Pick up)\b/i.test(e.title);
 
   return (
     <div className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden bg-white">
