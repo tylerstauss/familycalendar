@@ -19,13 +19,23 @@ interface AdminUser {
   trial_ends_at: string | null;
 }
 
-const SUB_BADGE: Record<string, { label: string; className: string }> = {
-  active: { label: "Active", className: "bg-green-50 text-green-600" },
-  trialing: { label: "Trial", className: "bg-amber-50 text-amber-600" },
-  comped: { label: "Comped", className: "bg-purple-50 text-purple-600" },
-  cancelled: { label: "Cancelled", className: "bg-gray-100 text-gray-500" },
-  expired: { label: "Expired", className: "bg-red-50 text-red-500" },
+const SUB_STYLE: Record<string, string> = {
+  active: "bg-green-50 text-green-600",
+  trialing: "bg-amber-50 text-amber-600",
+  comped: "bg-purple-50 text-purple-600",
+  cancelled: "bg-gray-100 text-gray-500",
+  expired: "bg-red-50 text-red-500",
 };
+
+function subLabel(status: string | null, plan: string | null): string {
+  if (!status) return "";
+  if (status === "active" && plan) return `Active · ${plan === "annual" ? "Annual" : "Monthly"}`;
+  if (status === "trialing") return "Trial";
+  if (status === "comped") return "Comped";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "expired") return "Expired";
+  return status;
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -124,7 +134,6 @@ export default function AdminPage() {
             </div>
             <div className="divide-y divide-gray-50">
               {users.map((u) => {
-                const badge = u.sub_status ? SUB_BADGE[u.sub_status] : null;
                 const isComped = u.sub_status === "comped";
                 const isComping = compingId === u.family_id;
 
@@ -151,9 +160,9 @@ export default function AdminPage() {
                         >
                           {u.role ?? "member"}
                         </span>
-                        {badge && (
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.className}`}>
-                            {badge.label}
+                        {u.sub_status && (
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${SUB_STYLE[u.sub_status] ?? "bg-gray-100 text-gray-500"}`}>
+                            {subLabel(u.sub_status, u.sub_plan)}
                           </span>
                         )}
                       </div>
