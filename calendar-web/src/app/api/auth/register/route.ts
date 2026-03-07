@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   const userId = newId();
 
   const subId = newId();
-  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   await sql.transaction([
     sql`INSERT INTO families (id, name) VALUES (${familyId}, ${familyName.trim()})`,

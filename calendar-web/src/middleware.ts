@@ -5,16 +5,23 @@ import { neon } from "@neondatabase/serverless";
 const PUBLIC = ["/login", "/register", "/"];
 const SUBSCRIBE_EXEMPT = ["/login", "/register", "/subscribe", "/"];
 
+// Expired users can only access the calendar view
+const CALENDAR_ONLY_PAGES = ["/calendar"];
+const CALENDAR_ONLY_APIS = ["/api/events", "/api/members", "/api/family-calendars", "/api/ical"];
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  // Skip API routes and static files — they handle auth themselves
-  if (
-    pathname.startsWith("/api") ||
-    pathname.startsWith("/_next") ||
-    pathname.includes(".")
-  ) {
+
+  // Skip static files
+  if (pathname.startsWith("/_next") || pathname.includes(".")) {
     return NextResponse.next();
   }
+
+  // API routes — only do subscription check, no auth redirect
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next();
+  }
+
   if (PUBLIC.includes(pathname)) {
     // Redirect logged-in users away from the landing page to the app
     if (pathname === "/") {
@@ -31,7 +38,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
   if (pathname.startsWith("/admin") && session.role !== "admin") {
-    return NextResponse.redirect(new URL("/", req.url));
+    return NextResponse.redirect(new URL("/calendar", req.url));
   }
 
   // Subscription gate — admins always bypass
@@ -43,12 +50,19 @@ export async function middleware(req: NextRequest) {
         FROM subscriptions WHERE family_id = ${session.familyId}
       `;
       const now = new Date();
-      const hasAccess =
+      const hasFullAccess =
         sub?.status === "active" ||
         sub?.status === "comped" ||
         (sub?.status === "trialing" && sub.trial_ends_at && new Date(sub.trial_ends_at) > now);
-      if (!hasAccess) {
-        return NextResponse.redirect(new URL("/subscribe", req.url));
+
+      if (!hasFullAccess) {
+        // Expired/cancelled users can still view the calendar
+        const isCalendarOnly =
+          CALENDAR_ONLY_PAGES.some((p) => pathname.startsWith(p)) ||
+          CALENDAR_ONLY_APIS.some((p) => pathname.startsWith(p));
+        if (!isCalendarOnly) {
+          return NextResponse.redirect(new URL("/subscribe", req.url));
+        }
       }
     } catch (err) {
       console.error("Subscription check error:", err);

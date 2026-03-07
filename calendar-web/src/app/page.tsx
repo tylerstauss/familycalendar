@@ -73,7 +73,7 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-            14-day free trial — no credit card required
+            7-day free trial — cancel anytime
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
             The command center<br />for your family
@@ -96,7 +96,7 @@ export default function LandingPage() {
               Log in
             </Link>
           </div>
-          <p className="text-sm text-gray-400 mt-4">$4.99/month after trial · cancel anytime</p>
+          <p className="text-sm text-gray-400 mt-4">7-day free trial · $4.99/month after · cancel anytime</p>
         </div>
       </section>
 
@@ -184,7 +184,7 @@ export default function LandingPage() {
             </Link>
           </div>
         </div>
-        <p className="text-center text-sm text-gray-400 mt-6">14-day free trial on all plans · no credit card required to start</p>
+        <p className="text-center text-sm text-gray-400 mt-6">7-day free trial on all plans · cancel anytime</p>
       </section>
 
       {/* CTA */}
@@ -198,9 +198,9 @@ export default function LandingPage() {
             href="/register"
             className="inline-block px-10 py-4 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-600 transition-colors text-lg"
           >
-            Start your 14-day free trial
+            Start your 7-day free trial
           </Link>
-          <p className="text-sm text-gray-400 mt-4">No credit card required</p>
+          <p className="text-sm text-gray-400 mt-4">7-day free trial · cancel anytime</p>
         </div>
       </section>
 

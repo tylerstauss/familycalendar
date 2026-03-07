@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: { trial_period_days: 7 },
       success_url: `${origin}/subscribe/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/subscribe`,
       metadata: { familyId, plan },

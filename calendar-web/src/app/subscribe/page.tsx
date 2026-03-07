@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 interface Subscription {
@@ -25,6 +25,8 @@ function formatDate(iso: string | null): string {
 
 export default function SubscribePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isWelcome = searchParams.get("welcome") === "1";
   const [sub, setSub] = useState<Subscription | null | undefined>(undefined);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -110,15 +112,24 @@ export default function SubscribePage() {
           <Link href="/calendar" className="text-sm text-indigo-500 hover:text-indigo-700 font-medium mb-4 inline-block">
             ← Back to Calendar
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mt-2">Family Calendar Plans</h1>
-          <p className="text-gray-500 mt-2">All features included. One price for the whole family.</p>
+          {isWelcome ? (
+            <>
+              <h1 className="text-3xl font-bold text-gray-900 mt-2">One last step</h1>
+              <p className="text-gray-500 mt-2">Add a payment method to start your 7-day free trial. You won&apos;t be charged until day 8.</p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold text-gray-900 mt-2">Family Calendar Plans</h1>
+              <p className="text-gray-500 mt-2">All features included. One price for the whole family.</p>
+            </>
+          )}
           {isTrialing && daysLeft > 0 && (
             <div className="mt-4 inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 px-4 py-2 rounded-xl text-sm font-medium">
               <span>⏳</span>
               <span>{daysLeft} day{daysLeft !== 1 ? "s" : ""} left in your free trial</span>
             </div>
           )}
-          {isTrialing && daysLeft === 0 && (
+          {!isWelcome && !isTrialing && !isActive && !isComped && (
             <div className="mt-4 inline-flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-xl text-sm font-medium">
               <span>⚠️</span>
               <span>Your trial has expired. Subscribe to continue.</span>
@@ -179,7 +190,7 @@ export default function SubscribePage() {
                   disabled={!!loading}
                   className="w-full py-2.5 px-4 bg-indigo-500 text-white rounded-xl font-medium text-sm hover:bg-indigo-600 disabled:opacity-50 transition-colors"
                 >
-                  {loading === "stripe-monthly" ? "Loading…" : "Subscribe with Card"}
+                  {loading === "stripe-monthly" ? "Loading…" : "Start 7-day free trial"}
                 </button>
                 <button
                   onClick={() => handleCoinbase("monthly")}
@@ -218,7 +229,7 @@ export default function SubscribePage() {
                   disabled={!!loading}
                   className="w-full py-2.5 px-4 bg-indigo-500 text-white rounded-xl font-medium text-sm hover:bg-indigo-600 disabled:opacity-50 transition-colors"
                 >
-                  {loading === "stripe-annual" ? "Loading…" : "Subscribe with Card"}
+                  {loading === "stripe-annual" ? "Loading…" : "Start 7-day free trial"}
                 </button>
                 <button
                   onClick={() => handleCoinbase("annual")}

@@ -39,7 +39,7 @@ export default function RegisterPage() {
         setError(data.error ?? "Registration failed");
         return;
       }
-      router.push("/");
+      router.push("/subscribe?welcome=1");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {
