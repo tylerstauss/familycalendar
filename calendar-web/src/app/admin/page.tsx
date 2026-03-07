@@ -9,17 +9,36 @@ interface AdminUser {
   name: string;
   role: string;
   created_at: string;
+  family_id: string;
   family_name: string | null;
   member_count: number;
   members_with_cal: number;
+  sub_status: string | null;
+  sub_plan: string | null;
+  sub_period_end: string | null;
+  trial_ends_at: string | null;
+}
+
+const SUB_BADGE: Record<string, { label: string; className: string }> = {
+  active: { label: "Active", className: "bg-green-50 text-green-600" },
+  trialing: { label: "Trial", className: "bg-amber-50 text-amber-600" },
+  comped: { label: "Comped", className: "bg-purple-50 text-purple-600" },
+  cancelled: { label: "Cancelled", className: "bg-gray-100 text-gray-500" },
+  expired: { label: "Expired", className: "bg-red-50 text-red-500" },
+};
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [compingId, setCompingId] = useState<string | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
+  const fetchUsers = () => {
     fetch("/api/admin/users")
       .then((r) => {
         if (r.status === 403 || r.status === 401) {
@@ -33,7 +52,32 @@ export default function AdminPage() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchUsers();
   }, [router]);
+
+  const handleComp = async (familyId: string, currentlyComped: boolean) => {
+    setCompingId(familyId);
+    try {
+      await fetch(`/api/admin/families/${familyId}/comp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comped: !currentlyComped }),
+      });
+      // Optimistic update
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.family_id === familyId
+            ? { ...u, sub_status: currentlyComped ? "expired" : "comped" }
+            : u
+        )
+      );
+    } finally {
+      setCompingId(null);
+    }
+  };
 
   const adminCount = users.filter((u) => u.role === "admin").length;
   const memberCount = users.filter((u) => u.role !== "admin").length;
@@ -79,58 +123,94 @@ export default function AdminPage() {
               </p>
             </div>
             <div className="divide-y divide-gray-50">
-              {users.map((u) => (
-                <div key={u.id} className="flex items-start gap-4 px-5 py-4">
-                  <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0 mt-0.5 ${
-                      u.role === "admin"
-                        ? "bg-indigo-100 text-indigo-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {u.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-gray-900">{u.name}</p>
-                      <span
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          u.role === "admin"
-                            ? "bg-indigo-50 text-indigo-600"
-                            : "bg-gray-100 text-gray-500"
+              {users.map((u) => {
+                const badge = u.sub_status ? SUB_BADGE[u.sub_status] : null;
+                const isComped = u.sub_status === "comped";
+                const isComping = compingId === u.family_id;
+
+                return (
+                  <div key={u.id} className="flex items-start gap-4 px-5 py-4">
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0 mt-0.5 ${
+                        u.role === "admin"
+                          ? "bg-indigo-100 text-indigo-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-gray-900">{u.name}</p>
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                            u.role === "admin"
+                              ? "bg-indigo-50 text-indigo-600"
+                              : "bg-gray-100 text-gray-500"
+                          }`}
+                        >
+                          {u.role ?? "member"}
+                        </span>
+                        {badge && (
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-400 mt-0.5">{u.email}</p>
+                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                        {u.family_name && (
+                          <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg">
+                            {u.family_name}
+                          </span>
+                        )}
+                        {u.member_count > 0 ? (
+                          <span className="text-xs text-gray-400">
+                            {u.member_count} member{u.member_count !== 1 ? "s" : ""}
+                            {u.members_with_cal > 0 ? (
+                              <span className="text-emerald-500 ml-1">
+                                · {u.members_with_cal} with calendar
+                              </span>
+                            ) : (
+                              <span className="text-gray-300 ml-1">· none with calendar</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">No family members</span>
+                        )}
+                        {u.sub_status === "trialing" && u.trial_ends_at && (
+                          <span className="text-xs text-amber-500">
+                            Trial ends {formatDate(u.trial_ends_at)}
+                          </span>
+                        )}
+                        {u.sub_status === "active" && u.sub_period_end && (
+                          <span className="text-xs text-gray-400">
+                            Renews {formatDate(u.sub_period_end)}
+                            {u.sub_plan && ` · ${u.sub_plan}`}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-300">
+                          Joined {new Date(u.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Comp toggle */}
+                    {u.role !== "admin" && u.family_id && (
+                      <button
+                        onClick={() => handleComp(u.family_id, isComped)}
+                        disabled={isComping}
+                        className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-xl transition-colors disabled:opacity-50 ${
+                          isComped
+                            ? "bg-purple-50 text-purple-600 hover:bg-purple-100"
+                            : "bg-gray-50 text-gray-500 hover:bg-gray-100"
                         }`}
                       >
-                        {u.role ?? "member"}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-400 mt-0.5">{u.email}</p>
-                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                      {u.family_name && (
-                        <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded-lg">
-                          {u.family_name}
-                        </span>
-                      )}
-                      {u.member_count > 0 ? (
-                        <span className="text-xs text-gray-400">
-                          {u.member_count} member{u.member_count !== 1 ? "s" : ""}
-                          {u.members_with_cal > 0 ? (
-                            <span className="text-emerald-500 ml-1">
-                              · {u.members_with_cal} with calendar
-                            </span>
-                          ) : (
-                            <span className="text-gray-300 ml-1">· none with calendar</span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-300">No family members</span>
-                      )}
-                      <span className="text-xs text-gray-300">
-                        Joined {new Date(u.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
+                        {isComping ? "…" : isComped ? "Remove comp" : "Comp account"}
+                      </button>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

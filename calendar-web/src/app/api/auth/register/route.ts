@@ -30,9 +30,13 @@ export async function POST(req: NextRequest) {
   const familyId = newId();
   const userId = newId();
 
+  const subId = newId();
+  const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
   await sql.transaction([
     sql`INSERT INTO families (id, name) VALUES (${familyId}, ${familyName.trim()})`,
     sql`INSERT INTO users (id, family_id, email, password_hash, name) VALUES (${userId}, ${familyId}, ${normalizedEmail}, ${passwordHash}, ${name.trim()})`,
+    sql`INSERT INTO subscriptions (id, family_id, status, trial_ends_at) VALUES (${subId}, ${familyId}, 'trialing', ${trialEnd})`,
   ]);
 
   const token = await signSession({ userId, familyId, email: normalizedEmail, name: name.trim(), role: "member" });

@@ -225,6 +225,24 @@ async function setup() {
     ALTER TABLE ride_plans ADD COLUMN IF NOT EXISTS driver_event_id TEXT DEFAULT ''
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      family_id TEXT NOT NULL REFERENCES families(id) UNIQUE,
+      status TEXT NOT NULL DEFAULT 'trialing',
+      plan TEXT,
+      payment_method TEXT,
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      coinbase_charge_code TEXT,
+      current_period_end TEXT,
+      trial_ends_at TEXT,
+      comped_by TEXT,
+      created_at TEXT DEFAULT (NOW()::TEXT),
+      updated_at TEXT DEFAULT (NOW()::TEXT)
+    )
+  `;
+
   console.log("All tables created successfully.");
 }
 

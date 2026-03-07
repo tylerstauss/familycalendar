@@ -6,10 +6,25 @@ import { useRouter } from "next/navigation";
 import { FamilyMember, FamilyCalendar, Photo, getMemberTextColor } from "@/lib/types";
 import ColorPicker from "@/components/ColorPicker";
 
+interface Subscription {
+  status: string;
+  plan: string | null;
+  payment_method: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [sessionRole, setSessionRole] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [newMember, setNewMember] = useState("");
   const [adding, setAdding] = useState(false);
   const [icalUrls, setIcalUrls] = useState<Record<string, string>>({});
@@ -118,6 +133,10 @@ export default function SettingsPage() {
     fetch("/api/auth/me")
       .then((r) => r.ok ? r.json() : null)
       .then((d) => d?.role && setSessionRole(d.role))
+      .catch(() => null);
+    fetch("/api/subscribe/status")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => d && setSubscription(d))
       .catch(() => null);
   }, []);
 
@@ -272,6 +291,17 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
+  };
+
+  const handleManageBilling = async () => {
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/subscribe/stripe/portal", { method: "POST" });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } finally {
+      setPortalLoading(false);
+    }
   };
 
   const handleGoogleDisconnect = async () => {
@@ -816,6 +846,58 @@ export default function SettingsPage() {
             </div>
           </div>
         </section>
+
+        {/* Subscription */}
+        {subscription && (
+          <section className="bg-white rounded-2xl border border-gray-100 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Subscription</h2>
+            {subscription.status === "comped" ? (
+              <p className="text-sm text-purple-600 font-medium">Complimentary access</p>
+            ) : subscription.status === "active" ? (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  <p className="text-sm font-medium text-gray-900">
+                    {subscription.plan === "annual" ? "Annual plan" : "Monthly plan"} — Active
+                  </p>
+                </div>
+                {subscription.current_period_end && (
+                  <p className="text-sm text-gray-400 mb-3">
+                    Renews {formatDate(subscription.current_period_end)}
+                  </p>
+                )}
+                {subscription.payment_method === "stripe" && (
+                  <button
+                    onClick={handleManageBilling}
+                    disabled={portalLoading}
+                    className="text-sm text-indigo-500 hover:text-indigo-700 font-medium disabled:opacity-50"
+                  >
+                    {portalLoading ? "Opening…" : "Manage Billing →"}
+                  </button>
+                )}
+              </div>
+            ) : subscription.status === "trialing" ? (
+              <div>
+                <p className="text-sm text-amber-600 font-medium mb-1">Free trial</p>
+                {subscription.trial_ends_at && (
+                  <p className="text-sm text-gray-400 mb-3">
+                    Trial ends {formatDate(subscription.trial_ends_at)}
+                  </p>
+                )}
+                <Link href="/subscribe" className="text-sm text-indigo-500 hover:text-indigo-700 font-medium">
+                  Subscribe to continue →
+                </Link>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-red-500 font-medium mb-2">Subscription expired</p>
+                <Link href="/subscribe" className="text-sm text-indigo-500 hover:text-indigo-700 font-medium">
+                  Renew subscription →
+                </Link>
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Admin */}
         {sessionRole === "admin" && (
