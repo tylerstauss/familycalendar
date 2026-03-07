@@ -195,7 +195,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     {/* Comp toggle */}
-                    {u.role !== "admin" && u.family_id && (
+                    {u.family_id && (
                       <button
                         onClick={() => handleComp(u.family_id, isComped)}
                         disabled={isComping}
