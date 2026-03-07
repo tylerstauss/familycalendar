@@ -107,7 +107,7 @@ export default function SubscribePage() {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
-          <Link href="/" className="text-sm text-indigo-500 hover:text-indigo-700 font-medium mb-4 inline-block">
+          <Link href="/calendar" className="text-sm text-indigo-500 hover:text-indigo-700 font-medium mb-4 inline-block">
             ← Back to Calendar
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mt-2">Family Calendar Plans</h1>

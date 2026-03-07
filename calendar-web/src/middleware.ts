@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 
-const PUBLIC = ["/login", "/register"];
-const SUBSCRIBE_EXEMPT = ["/login", "/register", "/subscribe"];
+const PUBLIC = ["/login", "/register", "/"];
+const SUBSCRIBE_EXEMPT = ["/login", "/register", "/subscribe", "/"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -15,7 +15,15 @@ export async function middleware(req: NextRequest) {
   ) {
     return NextResponse.next();
   }
-  if (PUBLIC.includes(pathname)) return NextResponse.next();
+  if (PUBLIC.includes(pathname)) {
+    // Redirect logged-in users away from the landing page to the app
+    if (pathname === "/") {
+      const token = req.cookies.get("session")?.value;
+      const session = token ? await verifySession(token) : null;
+      if (session) return NextResponse.redirect(new URL("/calendar", req.url));
+    }
+    return NextResponse.next();
+  }
 
   const token = req.cookies.get("session")?.value;
   const session = token ? await verifySession(token) : null;

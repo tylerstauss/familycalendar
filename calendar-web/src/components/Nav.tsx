@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const tabs = [
-  { href: "/", label: "Calendar", icon: CalendarIcon },
+  { href: "/calendar", label: "Calendar", icon: CalendarIcon },
   { href: "/meals", label: "Meals", icon: MealsIcon },
   { href: "/lists", label: "Lists", icon: GroceryIcon },
   { href: "/chores", label: "Chores", icon: ChoresIcon },
@@ -23,7 +23,7 @@ export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/photos";
+  const isAuthPage = pathname === "/login" || pathname === "/register" || pathname === "/photos" || pathname === "/";
 
   useEffect(() => {
     if (isAuthPage) return;

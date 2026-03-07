@@ -1,1132 +1,226 @@
-"use client";
+import Link from "next/link";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { format, addDays, subDays, addMonths, subMonths, isToday, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isSameDay, isSameMonth } from "date-fns";
-import { CalendarEvent, FamilyMember, Meal, FoodItem, MealPlan, getMemberColumnBg, getMemberTextColor } from "@/lib/types";
-import EventCard from "@/components/EventCard";
-import AddEventModal from "@/components/AddEventModal";
+const features = [
+  {
+    icon: "📅",
+    title: "Family Calendar",
+    description: "One shared calendar for everyone. Day, week, and month views with color-coded family members.",
+  },
+  {
+    icon: "🍽️",
+    title: "Meal Planning",
+    description: "Plan weekly meals, save recipes, and auto-generate grocery lists so dinner is never a question.",
+  },
+  {
+    icon: "✅",
+    title: "Chores & Rewards",
+    description: "Assign chores, track completions, earn stars, and redeem rewards. Kids actually want to help.",
+  },
+  {
+    icon: "🚗",
+    title: "Rides Coordinator",
+    description: "Plan pickups and drop-offs for kids' activities. See drive times and assign drivers at a glance.",
+  },
+  {
+    icon: "📋",
+    title: "Grocery Lists",
+    description: "Shared lists that sync in real time. Check items off as you shop — no more double-buying.",
+  },
+  {
+    icon: "📸",
+    title: "Family Photos",
+    description: "A private photo slideshow for your family. Display it on a wall-mounted iPad as a living frame.",
+  },
+];
 
-export default function CalendarPage() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [members, setMembers] = useState<FamilyMember[]>([]);
-  const [savedMeals, setSavedMeals] = useState<Meal[]>([]);
-  const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
-  const [mealDetailEvent, setMealDetailEvent] = useState<CalendarEvent | null>(null);
-  const [eventDetailEvent, setEventDetailEvent] = useState<CalendarEvent | null>(null);
-  const [viewMode, setViewMode] = useState<"day" | "week" | "month">("day");
-  const [now, setNow] = useState(new Date());
+const steps = [
+  { step: "1", title: "Create your family", description: "Sign up and name your family. Takes 30 seconds." },
+  { step: "2", title: "Add family members", description: "Add everyone in your household with their own color." },
+  { step: "3", title: "Connect calendars", description: "Paste Google Calendar links to pull in existing events." },
+  { step: "4", title: "Put it on the wall", description: "Mount an iPad and set it to kiosk mode. Your dashboard is live." },
+];
 
-  // Update clock every minute
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch members, meals, and food items once
-  useEffect(() => {
-    fetch("/api/members").then((r) => r.json()).then(setMembers);
-    fetch("/api/meals").then((r) => r.json()).then(setSavedMeals);
-    fetch("/api/food-items").then((r) => r.json()).then(setFoodItems);
-  }, []);
-
-  // Keep stable refs for meals/food items so fetchEvents can access latest values
-  const savedMealsRef = useRef(savedMeals);
-  const foodItemsRef = useRef(foodItems);
-  useEffect(() => { savedMealsRef.current = savedMeals; }, [savedMeals]);
-  useEffect(() => { foodItemsRef.current = foodItems; }, [foodItems]);
-
-  // Fetch events when date or view changes
-  const fetchEvents = useCallback(async () => {
-    setLoading(true);
-    const dateStr = format(selectedDate, "yyyy-MM-dd");
-
-    let params: string;
-    if (viewMode === "day") {
-      // Extend end by 1 day so events that start in the evening local time but
-      // land on the next UTC date (e.g. 4:35 PM PST = 00:35 UTC next day) are included.
-      // getEventPos filters them to the correct visible range client-side.
-      const nextDayStr = format(addDays(selectedDate, 1), "yyyy-MM-dd");
-      params = `start=${dateStr}&end=${nextDayStr}`;
-    } else if (viewMode === "week") {
-      const ws = startOfWeek(selectedDate, { weekStartsOn: 0 });
-      const we = endOfWeek(selectedDate, { weekStartsOn: 0 });
-      params = `start=${format(ws, "yyyy-MM-dd")}&end=${format(we, "yyyy-MM-dd")}`;
-    } else {
-      // Month view — fetch the full grid (may include days from prev/next month)
-      const ms = startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 });
-      const me = endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 });
-      params = `start=${format(ms, "yyyy-MM-dd")}&end=${format(me, "yyyy-MM-dd")}`;
-    }
-
-    // Fetch local, iCal events, and meal plans in parallel
-    const [localRes, icalRes, mealsRes] = await Promise.allSettled([
-      fetch(`/api/events?${params}`).then((r) => r.json()),
-      fetch(`/api/ical?${params}`).then((r) => r.json()),
-      fetch(`/api/meal-plans?${params}`).then((r) => r.json()),
-    ]);
-
-    const localEvents: CalendarEvent[] = localRes.status === "fulfilled" ? localRes.value : [];
-    // Filter driver events from iCal results — the local version already has the correct
-    // assignee (driver only). The iCal-synced copy matches kid names via assigneesFromTitle
-    // and would incorrectly show in the kids' columns.
-    // Also filter by title as a fallback since Google Calendar may not preserve the
-    // __ride_driver__ description through the iCal round-trip.
-    const driverTitles = new Set(
-      localEvents
-        .filter((e) => (e.notes || "").includes("__ride_driver__"))
-        .map((e) => e.title)
-    );
-    const icalEvents: CalendarEvent[] = (icalRes.status === "fulfilled" && Array.isArray(icalRes.value) ? icalRes.value : [])
-      .filter((e: CalendarEvent) => !e.notes?.includes("__ride_driver__") && !driverTitles.has(e.title));
-
-    // Convert meal plans to calendar events
-    const mealTimeMap: Record<string, { hour: number; minute: number; label: string }> = {
-      breakfast: { hour: 8, minute: 0, label: "Breakfast" },
-      lunch: { hour: 12, minute: 30, label: "Lunch" },
-      dinner: { hour: 18, minute: 15, label: "Dinner" },
-      snack: { hour: 15, minute: 0, label: "Snack" },
-    };
-    const mealPlans: MealPlan[] = mealsRes.status === "fulfilled" && Array.isArray(mealsRes.value) ? mealsRes.value : [];
-
-    // Build lookup: meal ID → food item names
-    const foodMap = new Map(foodItemsRef.current.map((f: FoodItem) => [f.id, f.name]));
-    const mealFoodMap = new Map(
-      savedMealsRef.current.map((m: Meal) => [
-        m.id,
-        m.food_item_ids.map((fid: string) => foodMap.get(fid)).filter(Boolean) as string[],
-      ])
-    );
-
-    const mealEvents: CalendarEvent[] = mealPlans.map((mp) => {
-      const time = mealTimeMap[mp.meal_type] || mealTimeMap.dinner;
-      const startDate = new Date(`${mp.date}T00:00:00`);
-      startDate.setHours(time.hour, time.minute, 0);
-      const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // 30 min duration
-      const foodItems = mp.food_item_id ? mealFoodMap.get(mp.food_item_id) : undefined;
-      return {
-        id: `meal-${mp.id}`,
-        title: `${time.label}: ${mp.food_name}`,
-        start_time: startDate.toISOString(),
-        end_time: endDate.toISOString(),
-        location: "",
-        notes: mp.notes || "",
-        assignee_ids: mp.assignee_ids || [],
-        source: "meal" as const,
-        meal_food_items: foodItems,
-      };
-    });
-
-    // Merge and sort
-    const merged = [...localEvents, ...icalEvents, ...mealEvents].sort(
-      (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-    );
-    setEvents(merged);
-    setLoading(false);
-  }, [selectedDate, viewMode]);
-
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
-
-  // Re-fetch events every 15 minutes for kiosk mode
-  useEffect(() => {
-    const interval = setInterval(() => fetchEvents(), 15 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [fetchEvents]);
-
-  const navigateDate = (dir: number) => {
-    setSelectedDate((d) => {
-      if (viewMode === "month") return dir > 0 ? addMonths(d, 1) : subMonths(d, 1);
-      if (viewMode === "week") return dir > 0 ? addDays(d, 7) : subDays(d, 7);
-      return dir > 0 ? addDays(d, 1) : subDays(d, 1);
-    });
-  };
-
-  const handleAddEvent = async (event: Omit<CalendarEvent, "id" | "created_at">) => {
-    await fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(event),
-    });
-    fetchEvents();
-  };
-
-  const handleUpdateEvent = async (event: CalendarEvent) => {
-    await fetch("/api/events", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(event),
-    });
-    setEditingEvent(null);
-    fetchEvents();
-  };
-
-  const handleDeleteEvent = async (id: string) => {
-    if (!confirm("Delete this event?")) return;
-    await fetch("/api/events", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    fetchEvents();
-  };
-
-  // Group events by day for week view
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
-  const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 0 });
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const day = addDays(weekStart, i);
-    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-    const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-    return {
-      date: day,
-      events: events.filter((e) => {
-        const s = new Date(e.start_time);
-        const en = new Date(e.end_time);
-        return s < dayEnd && en > dayStart;
-      }),
-    };
-  });
-
+export default function LandingPage() {
   return (
-    <div className="min-h-screen">
-      {/* Skylight Header */}
-      <header className="px-4 md:px-8 py-4 border-b border-gray-100">
-        <div className="flex items-center justify-between">
-          {/* Left: date + time */}
-          <div className="flex items-baseline gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">
-              {viewMode === "month"
-                ? format(selectedDate, "MMMM yyyy")
-                : format(selectedDate, "EEE, MMM d")}
-            </h1>
-            {viewMode !== "month" && isToday(selectedDate) && (
-              <span className="text-lg text-gray-400 font-medium">
-                {format(now, "h:mm a")}
-              </span>
-            )}
-          </div>
-
-          {/* Right: controls */}
+    <div className="min-h-screen bg-white">
+      {/* Nav */}
+      <header className="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {/* Day/Week/Month toggle */}
-            <div className="bg-gray-100 rounded-xl p-0.5 flex">
-              <button
-                onClick={() => setViewMode("day")}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${viewMode === "day" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-              >
-                Day
-              </button>
-              <button
-                onClick={() => setViewMode("week")}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${viewMode === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-              >
-                Week
-              </button>
-              <button
-                onClick={() => setViewMode("month")}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${viewMode === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-              >
-                Month
-              </button>
+            <div className="w-7 h-7 bg-indigo-500 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+              </svg>
             </div>
-
-            {/* Today button */}
-            {!isToday(selectedDate) && (
-              <button
-                onClick={() => setSelectedDate(new Date())}
-                className="px-3 py-1.5 text-sm font-medium text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
-              >
-                Today
-              </button>
-            )}
-
-            {/* Navigation arrows */}
-            <button onClick={() => navigateDate(-1)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </button>
-            <button onClick={() => navigateDate(1)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
+            <span className="font-semibold text-gray-900">Family Calendar</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/login" className="text-sm text-gray-500 hover:text-gray-900 font-medium transition-colors">
+              Log in
+            </Link>
+            <Link
+              href="/register"
+              className="text-sm bg-indigo-500 text-white px-4 py-2 rounded-xl font-medium hover:bg-indigo-600 transition-colors"
+            >
+              Get started free
+            </Link>
           </div>
         </div>
-
-        {/* Week range subtitle */}
-        {viewMode === "week" && (
-          <p className="text-sm text-gray-400 mt-1">
-            {format(weekStart, "MMM d")} &ndash; {format(weekEnd, "MMM d, yyyy")}
-          </p>
-        )}
-        {/* Month subtitle — how many events this month */}
-        {viewMode === "month" && events.length > 0 && (
-          <p className="text-sm text-gray-400 mt-1">
-            {events.length} event{events.length !== 1 ? "s" : ""}
-          </p>
-        )}
       </header>
 
-      {/* Content */}
-      <div className="px-4 md:px-8 py-6">
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      {/* Hero */}
+      <section className="pt-32 pb-20 px-6">
+        <div className="max-w-3xl mx-auto text-center">
+          <div className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+            14-day free trial — no credit card required
           </div>
-        ) : viewMode === "day" ? (
-          <DayView
-            events={events}
-            members={members}
-            onEdit={setEditingEvent}
-            onDelete={handleDeleteEvent}
-            onMealClick={setMealDetailEvent}
-            onEventClick={setEventDetailEvent}
-            now={now}
-            selectedDate={selectedDate}
-          />
-        ) : viewMode === "week" ? (
-          <WeekView
-            weekDays={weekDays}
-            events={events}
-            members={members}
-            onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
-            onEventClick={setEventDetailEvent}
-            onMealClick={setMealDetailEvent}
-            now={now}
-          />
-        ) : (
-          <MonthView
-            selectedDate={selectedDate}
-            events={events}
-            members={members}
-            onDayClick={(date) => { setSelectedDate(date); setViewMode("day"); }}
-            onEventClick={setEventDetailEvent}
-            onMealClick={setMealDetailEvent}
-            now={now}
-          />
-        )}
-      </div>
-
-      {/* FAB — floating add button */}
-      <button
-        onClick={() => setShowAddEvent(true)}
-        className="fixed bottom-8 right-8 md:bottom-8 md:right-8 w-14 h-14 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center z-30"
-        style={{ bottom: "max(2rem, env(safe-area-inset-bottom, 0px) + 4.5rem)" }}
-      >
-        <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-        </svg>
-      </button>
-
-      {/* Modals */}
-      {showAddEvent && (
-        <AddEventModal
-          members={members}
-          date={selectedDate}
-          onAdd={handleAddEvent}
-          onClose={() => setShowAddEvent(false)}
-        />
-      )}
-      {editingEvent && (
-        <AddEventModal
-          members={members}
-          date={new Date(editingEvent.start_time)}
-          event={editingEvent}
-          onAdd={handleUpdateEvent}
-          onClose={() => setEditingEvent(null)}
-        />
-      )}
-      {mealDetailEvent && (
-        <MealDetailModal
-          event={mealDetailEvent}
-          members={members}
-          onClose={() => setMealDetailEvent(null)}
-        />
-      )}
-      {eventDetailEvent && (
-        <EventDetailModal
-          event={eventDetailEvent}
-          members={members}
-          onClose={() => setEventDetailEvent(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Meal Detail Modal ──────────────────────────────────
-
-function MealDetailModal({
-  event,
-  members,
-  onClose,
-}: {
-  event: CalendarEvent;
-  members: FamilyMember[];
-  onClose: () => void;
-}) {
-  const assignedMembers = members.filter((m) => event.assignee_ids.includes(m.id));
-
-  return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs text-gray-400 uppercase font-medium mb-0.5">
-              {format(new Date(event.start_time), "EEEE, MMM d · h:mm a")}
-            </p>
-            <h2 className="text-lg font-semibold text-gray-900">{event.title}</h2>
-            {assignedMembers.length > 0 && (
-              <div className="flex gap-1 mt-1.5 flex-wrap">
-                {assignedMembers.map((m) => (
-                  <span
-                    key={m.id}
-                    className="text-xs font-medium px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: m.color, color: "#374151" }}
-                  >
-                    {m.name}
-                  </span>
-                ))}
-              </div>
-            )}
+          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight mb-6">
+            The command center<br />for your family
+          </h1>
+          <p className="text-xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
+            One place for your family&apos;s calendar, meals, chores, rides, and more.
+            Designed to live on a wall-mounted iPad — always on, always up to date.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/register"
+              className="w-full sm:w-auto px-8 py-3.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-600 transition-colors text-base"
+            >
+              Start your free trial
+            </Link>
+            <Link
+              href="/login"
+              className="w-full sm:w-auto px-8 py-3.5 border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors text-base"
+            >
+              Log in
+            </Link>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 -mr-1 -mt-1 rounded-lg shrink-0">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <p className="text-sm text-gray-400 mt-4">$4.99/month after trial · cancel anytime</p>
         </div>
+      </section>
 
-        {event.meal_food_items && event.meal_food_items.length > 0 ? (
-          <div className="p-5">
-            <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Food items</p>
-            <ul className="space-y-1.5">
-              {event.meal_food_items.map((name) => (
-                <li key={name} className="flex items-center gap-2 text-gray-800">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
-                  {name}
-                </li>
-              ))}
-            </ul>
+      {/* Features */}
+      <section className="py-20 px-6 bg-gray-50">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Everything your family needs</h2>
+            <p className="text-gray-500 text-lg">All features included in every plan.</p>
           </div>
-        ) : (
-          <div className="p-5 text-sm text-gray-400">No food items listed for this meal.</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Event Detail Modal ──────────────────────────────────────────
-
-function EventDetailModal({
-  event,
-  members,
-  onClose,
-}: {
-  event: CalendarEvent;
-  members: FamilyMember[];
-  onClose: () => void;
-}) {
-  const assignedMembers = members.filter((m) => event.assignee_ids.includes(m.id));
-  const allDay = isAllDayEvent(event);
-  const start = new Date(event.start_time);
-  const end = new Date(event.end_time);
-  const notes = event.notes
-    ?.split("-::~:~::")[0]
-    .replace(/\s*Learn more about Meet at:.*$/m, "")
-    .trim();
-
-  const sourceLabel =
-    event.source === "ical" ? "Personal Calendar" :
-    event.source === "family-ical" ? "Family Calendar" :
-    "Calendar";
-
-  const timeLabel = allDay
-    ? format(start, "EEEE, MMM d")
-    : `${format(start, "EEEE, MMM d")} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
-
-  return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-gray-400 uppercase font-medium mb-0.5">{sourceLabel}</p>
-            <p className="text-xs text-gray-400 mb-1.5">{timeLabel}</p>
-            <h2 className="text-lg font-semibold text-gray-900">{event.title}</h2>
-            {assignedMembers.length > 0 && (
-              <div className="flex gap-1 mt-1.5 flex-wrap">
-                {assignedMembers.map((m) => (
-                  <span
-                    key={m.id}
-                    className="text-xs font-medium px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: m.color, color: "#374151" }}
-                  >
-                    {m.name}
-                  </span>
-                ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {features.map((f) => (
+              <div key={f.title} className="bg-white rounded-2xl border border-gray-100 p-6">
+                <div className="text-3xl mb-3">{f.icon}</div>
+                <h3 className="font-semibold text-gray-900 mb-1.5">{f.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{f.description}</p>
               </div>
-            )}
+            ))}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 -mr-1 -mt-1 rounded-lg shrink-0">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
         </div>
+      </section>
 
-        {(event.location || notes) ? (
-          <div className="p-5 space-y-3.5">
-            {event.location && (
-              <div className="flex items-start gap-2.5">
-                <svg className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <p className="text-sm text-gray-700">{event.location}</p>
-              </div>
-            )}
-            {notes && (
-              <div className="flex items-start gap-2.5">
-                <svg className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{notes}</p>
-              </div>
-            )}
+      {/* How it works */}
+      <section className="py-20 px-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Up and running in minutes</h2>
+            <p className="text-gray-500 text-lg">No IT degree required.</p>
           </div>
-        ) : (
-          <div className="p-5 text-sm text-gray-400">No additional details for this event.</div>
-        )}
-      </div>
-    </div>
-  );
-}
+          <div className="space-y-6">
+            {steps.map((s) => (
+              <div key={s.step} className="flex items-start gap-5">
+                <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  {s.step}
+                </div>
+                <div className="pt-1.5">
+                  <p className="font-semibold text-gray-900">{s.title}</p>
+                  <p className="text-sm text-gray-500 mt-0.5">{s.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
-// ── Week Time Grid ──────────────────────────────────────────────
-
-const W_HOUR_HEIGHT = 64; // px per hour
-const W_START = 7;        // 7 AM
-const W_END = 19;         // 7 PM
-const W_HOURS = W_END - W_START;
-const ALL_DAY_LANE_H = 24; // px per all-day event lane
-
-function isAllDayEvent(evt: CalendarEvent): boolean {
-  const s = new Date(evt.start_time);
-  const e = new Date(evt.end_time);
-  return (
-    s.getUTCHours() === 0 && s.getUTCMinutes() === 0 && s.getUTCSeconds() === 0 &&
-    e.getUTCHours() === 0 && e.getUTCMinutes() === 0 && e.getUTCSeconds() === 0 &&
-    e.getTime() - s.getTime() >= 86400000
-  );
-}
-
-function WeekView({
-  weekDays,
-  events,
-  members,
-  onDayClick,
-  onEventClick,
-  onMealClick,
-  now,
-}: {
-  weekDays: { date: Date; events: CalendarEvent[] }[];
-  events: CalendarEvent[];
-  members: FamilyMember[];
-  onDayClick: (date: Date) => void;
-  onEventClick: (e: CalendarEvent) => void;
-  onMealClick: (e: CalendarEvent) => void;
-  now: Date;
-}) {
-  const hourLabels = Array.from({ length: W_HOURS + 1 }, (_, i) => W_START + i);
-
-  // ── All-day event layout ──────────────────────────────────────
-  const weekStartDate = weekDays[0].date;
-  const weekEndDate = addDays(weekDays[6].date, 1); // exclusive
-  const MS_PER_DAY = 86400000;
-
-  const allDayEvts = events.filter(isAllDayEvent).filter((evt) => {
-    const s = new Date(evt.start_time);
-    const e = new Date(evt.end_time);
-    return s < weekEndDate && e > weekStartDate;
-  });
-
-  // Sort by start date, then longer events first
-  allDayEvts.sort((a, b) => {
-    const d = new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
-    return d !== 0 ? d : new Date(b.end_time).getTime() - new Date(a.end_time).getTime();
-  });
-
-  type AllDayLayout = { evt: CalendarEvent; lane: number; startCol: number; spanCols: number };
-  const allDayLayouts: AllDayLayout[] = [];
-  const laneEndCols: number[] = [];
-
-  for (const evt of allDayEvts) {
-    const s = new Date(evt.start_time);
-    const e = new Date(evt.end_time);
-    const startCol = Math.max(0, Math.round((s.getTime() - weekStartDate.getTime()) / MS_PER_DAY));
-    const endCol = Math.min(7, Math.round((e.getTime() - weekStartDate.getTime()) / MS_PER_DAY));
-    const spanCols = endCol - startCol;
-    if (spanCols <= 0) continue;
-    let lane = laneEndCols.findIndex((ec) => ec <= startCol);
-    if (lane === -1) { lane = laneEndCols.length; laneEndCols.push(endCol); }
-    else { laneEndCols[lane] = endCol; }
-    allDayLayouts.push({ evt, lane, startCol, spanCols });
-  }
-
-  const numLanes = laneEndCols.length;
-  const allDayRowHeight = numLanes > 0 ? numLanes * ALL_DAY_LANE_H + 6 : 0;
-
-  const getEventPos = (event: CalendarEvent, colDate: Date) => {
-    const start = new Date(event.start_time);
-    const end = new Date(event.end_time);
-    const colStart = new Date(colDate.getFullYear(), colDate.getMonth(), colDate.getDate());
-    const colEnd = new Date(colDate.getFullYear(), colDate.getMonth(), colDate.getDate() + 1);
-    if (start >= colEnd || end <= colStart) return null;
-    const startMins = start < colStart ? 0 : start.getHours() * 60 + start.getMinutes();
-    const endMins = end >= colEnd ? W_END * 60 : end.getHours() * 60 + end.getMinutes();
-    if (startMins >= W_END * 60) return null;
-    const top = Math.max((startMins - W_START * 60) / 60 * W_HOUR_HEIGHT, 0);
-    const visibleStart = Math.max(startMins, W_START * 60);
-    const visibleEnd = Math.min(Math.max(endMins, startMins + 30), W_END * 60);
-    const height = visibleEnd > visibleStart
-      ? Math.max((visibleEnd - visibleStart) / 60 * W_HOUR_HEIGHT, 22)
-      : 22;
-    return { top, height };
-  };
-
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const nowTop = (nowMins - W_START * 60) / 60 * W_HOUR_HEIGHT;
-  const showNowLine = nowMins >= W_START * 60 && nowMins < W_END * 60;
-
-  return (
-    <div className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden bg-white">
-      {/* Day headers */}
-      <div className="flex border-b border-gray-100">
-        <div className="w-14 flex-shrink-0 border-r border-gray-100" />
-        {weekDays.map(({ date }) => (
-          <button
-            key={date.toISOString()}
-            onClick={() => onDayClick(date)}
-            className={`flex-1 py-3 text-center hover:bg-gray-50 transition-colors ${isToday(date) ? "bg-indigo-50/50" : ""}`}
-          >
-            <span className="text-xs text-gray-400 uppercase block">{format(date, "EEE")}</span>
-            <span className={`text-lg font-semibold ${isToday(date) ? "text-indigo-500" : "text-gray-800"}`}>
-              {format(date, "d")}
+      {/* Pricing */}
+      <section className="py-20 px-6 bg-gray-50">
+        <div className="max-w-2xl mx-auto text-center mb-12">
+          <h2 className="text-3xl font-bold text-gray-900 mb-3">Simple pricing</h2>
+          <p className="text-gray-500 text-lg">One family. One price. All features.</p>
+        </div>
+        <div className="max-w-2xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Monthly */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-7 flex flex-col">
+            <h3 className="font-semibold text-gray-900 mb-2">Monthly</h3>
+            <div className="mb-4">
+              <span className="text-4xl font-bold text-gray-900">$4.99</span>
+              <span className="text-gray-400 text-sm">/month</span>
+            </div>
+            <p className="text-sm text-gray-500 mb-6 flex-1">Full access. Cancel anytime.</p>
+            <Link
+              href="/register"
+              className="block text-center py-2.5 px-4 bg-indigo-500 text-white rounded-xl font-medium text-sm hover:bg-indigo-600 transition-colors"
+            >
+              Start free trial
+            </Link>
+          </div>
+          {/* Annual */}
+          <div className="bg-indigo-500 rounded-2xl p-7 flex flex-col relative">
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs font-semibold px-3 py-1 rounded-full">
+              BEST VALUE
             </span>
-          </button>
-        ))}
-      </div>
-
-      {/* All-day events row */}
-      {allDayLayouts.length > 0 && (
-        <div className="flex border-b border-gray-100" style={{ minHeight: allDayRowHeight + 4 }}>
-          <div className="w-14 flex-shrink-0 border-r border-gray-100 flex items-start justify-end pr-2 pt-1.5">
-            <span className="text-[10px] text-gray-400 leading-none">all-day</span>
-          </div>
-          <div className="flex-1 relative" style={{ height: allDayRowHeight }}>
-            {allDayLayouts.map(({ evt, lane, startCol, spanCols }) => {
-              const member = members.find((m) => evt.assignee_ids.includes(m.id));
-              const color = evt.color || member?.color || "#6366F1";
-              return (
-                <div
-                  key={evt.id}
-                  className="absolute rounded-md px-1.5 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                  style={{
-                    left: `calc(${(startCol / 7) * 100}% + 2px)`,
-                    width: `calc(${(spanCols / 7) * 100}% - 4px)`,
-                    top: lane * ALL_DAY_LANE_H + 3,
-                    height: ALL_DAY_LANE_H - 4,
-                    backgroundColor: color,
-                  }}
-                  title={evt.title}
-                  onClick={() => onEventClick(evt)}
-                >
-                  <p className="text-[11px] font-semibold leading-none truncate flex items-center h-full" style={{ color: getMemberTextColor(color) }}>
-                    {evt.title}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Scrollable grid */}
-      <div className="flex overflow-y-auto" style={{ maxHeight: "calc(100vh - 210px)" }}>
-        {/* Time labels */}
-        <div className="w-14 flex-shrink-0 border-r border-gray-100 relative bg-white" style={{ height: W_HOURS * W_HOUR_HEIGHT }}>
-          {hourLabels.map((h) => (
-            <div
-              key={h}
-              className="absolute right-2 text-[11px] text-gray-400 leading-none select-none"
-              style={{ top: (h - W_START) * W_HOUR_HEIGHT - 6 }}
+            <h3 className="font-semibold text-white mb-2">Annual</h3>
+            <div className="mb-1">
+              <span className="text-4xl font-bold text-white">$49.99</span>
+              <span className="text-indigo-200 text-sm">/year</span>
+            </div>
+            <p className="text-sm text-indigo-200 font-medium mb-4">Save ~17%</p>
+            <p className="text-sm text-indigo-100 mb-6 flex-1">Full access for a full year.</p>
+            <Link
+              href="/register"
+              className="block text-center py-2.5 px-4 bg-white text-indigo-600 rounded-xl font-medium text-sm hover:bg-indigo-50 transition-colors"
             >
-              {h === 12 ? "12 PM" : h < 12 ? `${h} AM` : `${h - 12} PM`}
-            </div>
-          ))}
+              Start free trial
+            </Link>
+          </div>
         </div>
+        <p className="text-center text-sm text-gray-400 mt-6">14-day free trial on all plans · no credit card required to start</p>
+      </section>
 
-        {/* Day columns */}
-        <div className="flex flex-1">
-          {weekDays.map(({ date, events: dayEvts }, colIdx) => (
-            <div
-              key={date.toISOString()}
-              className={`flex-1 relative ${colIdx < 6 ? "border-r border-gray-100" : ""} ${isToday(date) ? "bg-indigo-50/20" : ""}`}
-              style={{ height: W_HOURS * W_HOUR_HEIGHT }}
-            >
-              {/* Hour lines */}
-              {Array.from({ length: W_HOURS }, (_, i) => (
-                <div key={i} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: i * W_HOUR_HEIGHT }} />
-              ))}
-
-              {/* Current time line */}
-              {isToday(date) && showNowLine && (
-                <div className="absolute left-0 right-0 z-20 flex items-center" style={{ top: nowTop }}>
-                  <div className="w-2 h-2 rounded-full bg-indigo-500 -ml-1 flex-shrink-0" />
-                  <div className="flex-1 h-px bg-indigo-500" />
-                </div>
-              )}
-
-              {/* Events */}
-              {dayEvts.filter((e) => !isAllDayEvent(e)).map((evt) => {
-                const pos = getEventPos(evt, date);
-                if (!pos) return null;
-                const member = members.find((m) => evt.assignee_ids.includes(m.id));
-                const color = evt.color || member?.color || "#6366F1";
-                const isIcal = evt.source === "ical";
-                const isFamilyCal = evt.source === "family-ical";
-                const isMeal = evt.source === "meal";
-                return (
-                  <div
-                    key={evt.id}
-                    className="absolute left-0.5 right-0.5 rounded-md px-1.5 py-0.5 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity z-10"
-                    style={{ top: pos.top, height: pos.height, backgroundColor: color }}
-                    title={`${evt.title} — ${format(new Date(evt.start_time), "h:mm a")}`}
-                    onClick={isMeal ? () => onMealClick(evt) : () => onEventClick(evt)}
-                  >
-                    <p className="text-[11px] font-semibold leading-tight truncate" style={{ color: getMemberTextColor(color) }}>
-                      {isIcal && "🔗 "}{isFamilyCal && "👨‍👩‍👧‍👦 "}{isMeal && "🍽 "}{evt.title}
-                    </p>
-                    {pos.height >= 34 && (
-                      <p className="text-[10px] leading-tight opacity-80 truncate" style={{ color: getMemberTextColor(color) }}>
-                        {format(new Date(evt.start_time), "h:mm a")}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Day Time Grid ──────────────────────────────────────────────
-
-function fmtHour(h: number): string {
-  const h24 = h % 24;
-  if (h24 === 0) return "12 AM";
-  if (h24 === 12) return "12 PM";
-  return h24 < 12 ? `${h24} AM` : `${h24 - 12} PM`;
-}
-
-function DayView({
-  events,
-  members,
-  onEdit,
-  onMealClick,
-  onEventClick,
-  now,
-  selectedDate,
-}: {
-  events: CalendarEvent[];
-  members: FamilyMember[];
-  onEdit: (e: CalendarEvent) => void;
-  onDelete: (id: string) => void;
-  onMealClick: (e: CalendarEvent) => void;
-  onEventClick: (e: CalendarEvent) => void;
-  now: Date;
-  selectedDate: Date;
-}) {
-  const [startHour, setStartHour] = useState(W_START);
-  const [endHour, setEndHour] = useState(W_END);
-  const [atTop, setAtTop] = useState(true);
-  const [atBottom, setAtBottom] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const handleScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setAtTop(el.scrollTop <= 0);
-    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
-  };
-
-  // Reset range and auto-scroll to (currentHour - 1) when date changes
-  useEffect(() => {
-    setStartHour(W_START);
-    setEndHour(W_END);
-    // Scroll after next paint so layout is ready
-    requestAnimationFrame(() => {
-      if (!scrollRef.current) return;
-      const isToday = isSameDay(selectedDate, now);
-      const target = isToday ? Math.max(now.getHours() - 1, W_START) : W_START;
-      scrollRef.current.scrollTop = Math.max((target - W_START) * W_HOUR_HEIGHT, 0);
-      const el = scrollRef.current;
-      setAtTop(el.scrollTop <= 0);
-      setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 1);
-    });
-  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleShowEarlier = () => {
-    const delta = Math.min(startHour, 3);
-    if (delta === 0) return;
-    setStartHour((h) => h - delta);
-    // After re-render, push scrollTop down so the currently-visible time stays on screen
-    requestAnimationFrame(() => {
-      if (scrollRef.current) scrollRef.current.scrollTop += delta * W_HOUR_HEIGHT;
-    });
-  };
-
-  const handleShowLater = () => setEndHour((h) => Math.min(h + 3, 24));
-
-  if (members.length === 0) {
-    return (
-      <div className="text-center py-20 px-6">
-        <p className="text-5xl mb-4">&#128106;</p>
-        <h3 className="text-xl font-semibold text-gray-900 mb-1">Add family members first</h3>
-        <p className="text-gray-500 mb-6">Add family members in Settings so events can be assigned and shown in columns.</p>
-        <a
-          href="/settings"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-500 text-white text-sm font-medium rounded-xl hover:bg-indigo-600 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          Go to Settings
-        </a>
-      </div>
-    );
-  }
-
-  const visibleHours = endHour - startHour;
-  const hourLabels = Array.from({ length: visibleHours + 1 }, (_, i) => startHour + i);
-  const isViewingToday = isSameDay(selectedDate, now);
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const nowTop = (nowMins - startHour * 60) / 60 * W_HOUR_HEIGHT;
-  const showNowLine = isViewingToday && nowMins >= startHour * 60 && nowMins < endHour * 60;
-
-  const viewDayStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
-  const viewDayEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate() + 1);
-
-  const getEventPos = (event: CalendarEvent): { top: number; height: number } | null => {
-    const start = new Date(event.start_time);
-    const end = new Date(event.end_time);
-    if (start >= viewDayEnd || end <= viewDayStart) return null;
-    const sMins = start < viewDayStart ? 0 : start.getHours() * 60 + start.getMinutes();
-    const eMins = end >= viewDayEnd ? endHour * 60 : end.getHours() * 60 + end.getMinutes();
-    if (sMins >= endHour * 60) return null;
-    const top = Math.max((sMins - startHour * 60) / 60 * W_HOUR_HEIGHT, 0);
-    const visStart = Math.max(sMins, startHour * 60);
-    const visEnd = Math.min(Math.max(eMins, sMins + 30), endHour * 60);
-    const height = visEnd > visStart
-      ? Math.max((visEnd - visStart) / 60 * W_HOUR_HEIGHT, 22)
-      : 22;
-    return { top, height };
-  };
-
-  const familyEvents = events.filter((e) => e.assignee_ids.length === 0);
-  // Build set of driver event titles so iCal-synced copies can be identified even
-  // when the __ride_driver__ notes marker is stripped by Google Calendar.
-  const driverTitles = new Set(
-    events.filter((e) => (e.notes || "").includes("__ride_driver__")).map((e) => e.title)
-  );
-  const isDriverEvent = (e: CalendarEvent) =>
-    (e.notes || "").includes("__ride_driver__") ||
-    driverTitles.has(e.title) ||
-    /^(Drop off|Pick up)\b/i.test(e.title);
-
-  return (
-    <div className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden bg-white">
-      {/* Column headers */}
-      <div className="flex border-b border-gray-100">
-        <div className="w-14 flex-shrink-0 border-r border-gray-100" />
-        {members.map((member, i) => (
-          <div
-            key={member.id}
-            className={`flex-1 py-2 flex items-center justify-center ${i < members.length - 1 ? "border-r border-gray-100" : ""}`}
+      {/* CTA */}
+      <section className="py-24 px-6">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-4xl font-bold text-gray-900 mb-4">Ready to get organized?</h2>
+          <p className="text-gray-500 text-lg mb-8">
+            Join families who&apos;ve replaced the fridge whiteboard with something that actually works.
+          </p>
+          <Link
+            href="/register"
+            className="inline-block px-10 py-4 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-600 transition-colors text-lg"
           >
-            <div className="rounded-full px-3 h-8 flex items-center justify-center text-xs font-bold gap-1.5"
-              style={{ backgroundColor: member.color, color: getMemberTextColor(member.color) }}>
-              {member.name}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* All-day events banner */}
-      {(() => {
-        const allDay = events.filter(isAllDayEvent);
-        if (allDay.length === 0) return null;
-        return (
-          <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-gray-100 bg-gray-50/60">
-            <span className="text-[10px] text-gray-400 font-medium self-center mr-1">all-day</span>
-            {allDay.map((evt) => {
-              const member = members.find((m) => evt.assignee_ids.includes(m.id));
-              const color = evt.color || member?.color || "#6366F1";
-              const isLocal = evt.source === "local" || !evt.source;
-              return (
-                <div
-                  key={evt.id}
-                  className="text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-xs cursor-pointer hover:opacity-80 transition-opacity"
-                  style={{ backgroundColor: color, color: getMemberTextColor(color) }}
-                  title={evt.title}
-                  onClick={isLocal ? () => onEdit(evt) : () => onEventClick(evt)}
-                >
-                  {evt.source === "ical" && "🔗 "}{evt.source === "family-ical" && "👨‍👩‍👧‍👦 "}{evt.title}
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
-
-      {/* Show earlier CTA */}
-      {startHour > 0 && atTop && (
-        <button
-          onClick={handleShowEarlier}
-          className="flex items-center justify-center gap-1.5 w-full py-2 text-xs font-medium text-indigo-500 hover:bg-indigo-50 border-b border-gray-100 transition-colors"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-          </svg>
-          Show earlier &mdash; {fmtHour(Math.max(startHour - 3, 0))} to {fmtHour(startHour)}
-        </button>
-      )}
-
-      {/* Scrollable time grid */}
-      <div ref={scrollRef} className="flex overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }} onScroll={handleScroll}>
-        {/* Time labels */}
-        <div className="w-14 flex-shrink-0 border-r border-gray-100 relative bg-white" style={{ height: visibleHours * W_HOUR_HEIGHT }}>
-          {hourLabels.map((h) => (
-            <div key={h} className="absolute right-2 text-[11px] text-gray-400 leading-none select-none"
-              style={{ top: (h - startHour) * W_HOUR_HEIGHT - 6 }}>
-              {fmtHour(h)}
-            </div>
-          ))}
+            Start your 14-day free trial
+          </Link>
+          <p className="text-sm text-gray-400 mt-4">No credit card required</p>
         </div>
+      </section>
 
-        {/* Columns */}
-        <div className="flex flex-1">
-          {members.map((member, colIdx) => {
-            const isKid = member.member_type === "kid";
-            const memberEvents = events.filter((e) =>
-              e.assignee_ids.includes(member.id) && !(isKid && isDriverEvent(e))
-            );
-            const colEvents = [...familyEvents, ...memberEvents];
-            return (
-              <div key={member.id}
-                className={`flex-1 relative ${colIdx < members.length - 1 ? "border-r border-gray-100" : ""}`}
-                style={{ height: visibleHours * W_HOUR_HEIGHT }}>
-                {/* Hour lines */}
-                {Array.from({ length: visibleHours }, (_, i) => (
-                  <div key={i} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: i * W_HOUR_HEIGHT }} />
-                ))}
-                {/* Current time line */}
-                {showNowLine && (
-                  <div className="absolute left-0 right-0 z-20 flex items-center pointer-events-none" style={{ top: nowTop }}>
-                    <div className="w-2 h-2 rounded-full bg-indigo-500 -ml-1 flex-shrink-0" />
-                    <div className="flex-1 h-px bg-indigo-500" />
-                  </div>
-                )}
-                {/* Events */}
-                {colEvents.filter((e) => !isAllDayEvent(e)).map((evt) => {
-                  const pos = getEventPos(evt);
-                  if (!pos) return null;
-                  const isLocal = evt.source === "local" || !evt.source;
-                  const isMealEvt = evt.source === "meal";
-                  const color = member.color;
-                  const textColor = getMemberTextColor(color);
-                  return (
-                    <div key={evt.id}
-                      className="absolute left-0.5 right-0.5 rounded-lg px-2 py-1 overflow-hidden z-10 transition-opacity cursor-pointer hover:opacity-80"
-                      style={{ top: pos.top, height: pos.height, backgroundColor: color }}
-                      onClick={isMealEvt ? () => onMealClick(evt) : isLocal ? () => onEdit(evt) : () => onEventClick(evt)}
-                      title={`${evt.title} — ${format(new Date(evt.start_time), "h:mm a")}`}>
-                      <p className="text-xs font-semibold leading-tight truncate" style={{ color: textColor }}>
-                        {evt.source === "ical" && "🔗 "}
-                        {evt.source === "family-ical" && "👨‍👩‍👧‍👦 "}
-                        {evt.source === "meal" && "🍽 "}
-                        {evt.title}
-                      </p>
-                      {pos.height >= 34 && (
-                        <p className="text-[10px] leading-tight opacity-80 truncate" style={{ color: textColor }}>
-                          {format(new Date(evt.start_time), "h:mm a")}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+      {/* Footer */}
+      <footer className="border-t border-gray-100 py-8 px-6">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 bg-indigo-500 rounded-md flex items-center justify-center">
+              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+              </svg>
+            </div>
+            <span className="text-sm text-gray-500">Family Calendar</span>
+          </div>
+          <div className="flex items-center gap-5 text-sm text-gray-400">
+            <Link href="/login" className="hover:text-gray-600 transition-colors">Log in</Link>
+            <Link href="/register" className="hover:text-gray-600 transition-colors">Sign up</Link>
+          </div>
         </div>
-      </div>
-
-      {/* Show later CTA */}
-      {endHour < 24 && atBottom && (
-        <button
-          onClick={handleShowLater}
-          className="flex items-center justify-center gap-1.5 w-full py-2 text-xs font-medium text-indigo-500 hover:bg-indigo-50 border-t border-gray-100 transition-colors"
-        >
-          Show later &mdash; {fmtHour(endHour)} to {fmtHour(Math.min(endHour + 3, 24))}
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-          </svg>
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── Month Grid ──────────────────────────────────────────────────
-
-const MAX_EVENTS_PER_DAY = 3;
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function MonthView({
-  selectedDate,
-  events,
-  members,
-  onDayClick,
-  onEventClick,
-  onMealClick,
-  now,
-}: {
-  selectedDate: Date;
-  events: CalendarEvent[];
-  members: FamilyMember[];
-  onDayClick: (date: Date) => void;
-  onEventClick: (e: CalendarEvent) => void;
-  onMealClick: (e: CalendarEvent) => void;
-  now: Date;
-}) {
-  const monthStart = startOfMonth(selectedDate);
-  const monthEnd = endOfMonth(selectedDate);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
-
-  // Build array of all days in the grid
-  const days: Date[] = [];
-  for (let d = new Date(gridStart); d <= gridEnd; d = addDays(d, 1)) {
-    days.push(new Date(d));
-  }
-  // Split into weeks
-  const weeks: Date[][] = [];
-  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
-
-  return (
-    <div
-      className="flex flex-col border border-gray-100 rounded-2xl overflow-hidden bg-white"
-      style={{ height: "calc(100vh - 165px)" }}
-    >
-      {/* Day-of-week header */}
-      <div className="grid grid-cols-7 border-b border-gray-100 flex-shrink-0">
-        {DAY_NAMES.map((name) => (
-          <div key={name} className="py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wide">
-            {name}
-          </div>
-        ))}
-      </div>
-
-      {/* Week rows — fill remaining height equally */}
-      <div
-        className="flex-1 grid min-h-0"
-        style={{ gridTemplateRows: `repeat(${weeks.length}, 1fr)` }}
-      >
-        {weeks.map((week, wi) => (
-          <div
-            key={wi}
-            className={`grid grid-cols-7 ${wi < weeks.length - 1 ? "border-b border-gray-100" : ""}`}
-          >
-            {week.map((day, di) => {
-              const inMonth = isSameMonth(day, selectedDate);
-              const today = isSameDay(day, now);
-              const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-              const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
-              const dayEvts = events
-                .filter((e) => {
-                  const s = new Date(e.start_time);
-                  const en = new Date(e.end_time);
-                  return s < dayEnd && en > dayStart;
-                })
-                .slice(0, MAX_EVENTS_PER_DAY + 1); // +1 so we know if there's overflow
-              const shown = dayEvts.slice(0, MAX_EVENTS_PER_DAY);
-              const overflow = dayEvts.length - MAX_EVENTS_PER_DAY;
-
-              return (
-                <button
-                  key={di}
-                  onClick={() => onDayClick(day)}
-                  className={`text-left p-1.5 overflow-hidden transition-colors hover:bg-indigo-50/40 focus:outline-none ${
-                    di < 6 ? "border-r border-gray-100" : ""
-                  } ${!inMonth ? "bg-gray-50/60" : ""}`}
-                >
-                  {/* Date number */}
-                  <span
-                    className={`text-sm font-semibold inline-flex w-6 h-6 items-center justify-center rounded-full leading-none ${
-                      today
-                        ? "bg-indigo-500 text-white"
-                        : inMonth
-                        ? "text-gray-800"
-                        : "text-gray-300"
-                    }`}
-                  >
-                    {format(day, "d")}
-                  </span>
-
-                  {/* Event chips */}
-                  <div className="mt-0.5 space-y-0.5">
-                    {shown.map((evt) => {
-                      const member = members.find((m) => evt.assignee_ids.includes(m.id));
-                      const color = evt.color || member?.color || "#6366F1";
-                      const textColor = getMemberTextColor(color);
-                      const isMeal = evt.source === "meal";
-                      return (
-                        <div
-                          key={evt.id}
-                          className="text-[10px] font-medium px-1 py-px rounded leading-tight truncate hover:opacity-80 transition-opacity"
-                          style={{ backgroundColor: color, color: textColor }}
-                          title={evt.title}
-                          onClick={(e) => { e.stopPropagation(); isMeal ? onMealClick(evt) : onEventClick(evt); }}
-                        >
-                          {isMeal ? "🍽 " : ""}{evt.title}
-                        </div>
-                      );
-                    })}
-                    {overflow > 0 && (
-                      <p className="text-[10px] text-indigo-400 font-medium pl-0.5">
-                        +{overflow} more
-                      </p>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      </footer>
     </div>
   );
 }
