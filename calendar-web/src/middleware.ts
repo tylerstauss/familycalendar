@@ -3,7 +3,7 @@ import { verifySession } from "@/lib/auth";
 import { neon } from "@neondatabase/serverless";
 
 const PUBLIC = ["/login", "/register", "/"];
-const SUBSCRIBE_EXEMPT = ["/login", "/register", "/subscribe", "/"];
+const SUBSCRIBE_EXEMPT = ["/login", "/register", "/subscribe"];
 
 // Expired users can only access the calendar view
 const CALENDAR_ONLY_PAGES = ["/calendar"];
